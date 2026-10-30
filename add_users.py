@@ -13,10 +13,14 @@ CREATE TABLE IF NOT EXISTS users (
 )
 """)
 
-try:
-    cur.execute("ALTER TABLE items ADD COLUMN user_id INTEGER")
-except sqlite3.OperationalError:
-    print("user_id column already exists")
+for column_sql, column_name in [
+    ("ALTER TABLE items ADD COLUMN user_id INTEGER", "user_id"),
+    ("ALTER TABLE items ADD COLUMN resolved INTEGER DEFAULT 0", "resolved"),
+]:
+    try:
+        cur.execute(column_sql)
+    except sqlite3.OperationalError:
+        print(f"{column_name} column already exists")
 
 conn.commit()
 
