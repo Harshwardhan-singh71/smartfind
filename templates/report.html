@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Report an Item - SmartFind</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 500px; margin: 30px auto; padding: 0 15px; }
+        label { display: block; margin-top: 12px; font-weight: bold; }
+        input, select, textarea { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
+        button { margin-top: 18px; padding: 10px 20px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Report an Item</h1>
+    <form method="POST">
+        <label>I have...</label>
+        <select name="status" required>
+            <option value="lost">Lost something</option>
+            <option value="found">Found something</option>
+        </select>
+
+        <label>Item name</label>
+        <input type="text" name="title" required>
+
+        <label>Description</label>
+        <textarea name="description" rows="3"></textarea>
+
+        <label>Category</label>
+        <select name="category">
+            <option>Wallet</option>
+            <option>Bottle</option>
+            <option>Electronics</option>
+            <option>Books</option>
+            <option>ID Card</option>
+            <option>Keys</option>
+            <option>Clothing</option>
+            <option>Other</option>
+        </select>
+
+        <label>Location</label>
+        <input type="text" name="location" required>
+
+        <label>Your name</label>
+        <input type="text" name="contact_name" required>
+
+        <label>Your email</label>
+        <input type="email" name="contact_email" required>
+
+        <button type="submit">Submit</button>
+    </form>
+    <p><a href="/">Back to all items</a></p>
+</body>
+</html>

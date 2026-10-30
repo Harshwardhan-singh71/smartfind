@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SmartFind</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 0 15px; }
+        .item { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+        .tag { padding: 2px 8px; border-radius: 4px; color: white; font-size: 12px; }
+        .lost { background: #d9534f; }
+        .found { background: #5cb85c; }
+    </style>
+</head>
+<body>
+    <h1>SmartFind: Campus Lost &amp; Found</h1>
+        <p><a href="/report">+ Report a lost or found item</a></p>
+    {% for item in items %}
+    <div class="item">
+        <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
+        <h3>{{ item.title }}</h3>
+        <p>{{ item.description }}</p>
+        <p><b>Location:</b> {{ item.location }} | <b>Category:</b> {{ item.category }}</p>
+        <p><b>Contact:</b> {{ item.contact_name }} ({{ item.contact_email }})</p>
+    </div>
+    {% endfor %}
+</body>
+</html>
