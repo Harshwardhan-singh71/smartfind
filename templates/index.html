@@ -14,6 +14,15 @@
 <body>
     <h1>SmartFind: Campus Lost &amp; Found</h1>
         <p><a href="/report">+ Report a lost or found item</a></p>
+            <form method="GET" style="margin-bottom: 20px;">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search items..." style="padding: 8px; width: 55%;">
+        <select name="status" style="padding: 8px;">
+            <option value="">All</option>
+            <option value="lost" {% if status == 'lost' %}selected{% endif %}>Lost</option>
+            <option value="found" {% if status == 'found' %}selected{% endif %}>Found</option>
+        </select>
+        <button type="submit" style="padding: 8px 14px;">Search</button>
+    </form>
     {% for item in items %}
     <div class="item">
         <span class="tag {{ item.status }}">{{ item.status|upper }}</span>

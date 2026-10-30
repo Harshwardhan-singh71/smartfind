@@ -12,12 +12,26 @@ def get_db():
 
 @app.route("/")
 def home():
+    q = request.args.get("q", "").strip()
+    status = request.args.get("status", "")
+
+    query = "SELECT * FROM items WHERE 1=1"
+    params = []
+
+    if q:
+        query += " AND (title LIKE ? OR description LIKE ? OR location LIKE ? OR category LIKE ?)"
+        like = f"%{q}%"
+        params += [like, like, like, like]
+    if status in ("lost", "found"):
+        query += " AND status = ?"
+        params.append(status)
+
+    query += " ORDER BY date_reported DESC"
+
     conn = get_db()
-    items = conn.execute(
-        "SELECT * FROM items ORDER BY date_reported DESC"
-    ).fetchall()
+    items = conn.execute(query, params).fetchall()
     conn.close()
-    return render_template("index.html", items=items)
+    return render_template("index.html", items=items, q=q, status=status)
 
 
 @app.route("/report", methods=["GET", "POST"])
