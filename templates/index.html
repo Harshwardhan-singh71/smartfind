@@ -31,12 +31,19 @@
         <button type="submit" style="padding: 8px 14px;">Search</button>
     </form>
     {% for item in items %}
-    <div class="item">
+        <div class="item" {% if item.resolved %}style="opacity: 0.6;"{% endif %}>
         <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
         <h3>{{ item.title }}</h3>
         <p>{{ item.description }}</p>
         <p><b>Location:</b> {{ item.location }} | <b>Category:</b> {{ item.category }}</p>
         <p><b>Contact:</b> {{ item.contact_name }} ({{ item.contact_email }})</p>
+                {% if item.resolved %}
+            <p><b>✔ Returned / resolved</b></p>
+        {% elif session.user_id and session.user_id == item.user_id %}
+            <form method="POST" action="/resolve/{{ item.id }}">
+                <button type="submit">Mark as returned</button>
+            </form>
+        {% endif %}
     </div>
     {% endfor %}
 </body>

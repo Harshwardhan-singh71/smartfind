@@ -116,5 +116,20 @@ def logout():
     session.clear()
     return redirect(url_for("home"))
 
+@app.route("/resolve/<int:item_id>", methods=["POST"])
+def resolve(item_id):
+    if "user_id" not in session:
+        flash("Please log in first.")
+        return redirect(url_for("login"))
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE items SET resolved = 1 WHERE id = ? AND user_id = ?",
+        (item_id, session["user_id"]),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("home"))
+
 if __name__ == "__main__":
     app.run(debug=True)
