@@ -13,6 +13,13 @@
 </head>
 <body>
     <h1>SmartFind: Campus Lost &amp; Found</h1>
+        <p>
+        {% if session.user_id %}
+            Hello, {{ session.user_name }} | <a href="/logout">Logout</a>
+        {% else %}
+            <a href="/login">Login</a> | <a href="/register">Register</a>
+        {% endif %}
+    </p>
         <p><a href="/report">+ Report a lost or found item</a></p>
             <form method="GET" style="margin-bottom: 20px;">
         <input type="text" name="q" value="{{ q }}" placeholder="Search items..." style="padding: 8px; width: 55%;">
