@@ -199,6 +199,19 @@ def matches(item_id):
 
     results = find_matches(item, candidates)
     return render_template("matches.html", item=item, results=results)
+@app.route("/my-posts")
+def my_posts():
+    if "user_id" not in session:
+        flash("Please log in to see your posts.")
+        return redirect(url_for("login"))
+
+    conn = get_db()
+    items = conn.execute(
+        "SELECT * FROM items WHERE user_id = ? ORDER BY date_reported DESC",
+        (session["user_id"],),
+    ).fetchall()
+    conn.close()
+    return render_template("my_posts.html", items=items)
 
 if __name__ == "__main__":
     app.run(debug=True)

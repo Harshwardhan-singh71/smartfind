@@ -13,6 +13,7 @@
             <a href="/">Home</a>
             <a href="/report">Report item</a>
             {% if session.user_id %}
+                <a href="/my-posts">My posts</a>
                 <span class="nav-user">Hi, {{ session.user_name }}</span>
                 <a href="/logout">Logout</a>
             {% else %}
