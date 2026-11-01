@@ -105,6 +105,7 @@ footer { text-align: center; color: var(--muted); padding: 24px 0; font-size: 14
 }
 .tag.lost { background: var(--lost); }
 .tag.found { background: var(--found); }
+.tag.seen { background: #f59e0b; }
 .score {
     background: var(--primary);
     color: white;

@@ -5,13 +5,14 @@
 {% block content %}
     <div class="card form-card">
         <h1 class="page-title">Report an Item</h1>
-        <p class="subtitle">Tell us what you lost or found.</p>
+        <p class="subtitle">Tell us what you lost, found or saw.</p>
 
         <form method="POST">
             <label>I have...</label>
             <select name="status" required>
                 <option value="lost">Lost something</option>
                 <option value="found">Found something</option>
+                <option value="seen">Seen something (I don't have it)</option>
             </select>
 
             <label>Item name</label>
@@ -32,8 +33,26 @@
                 <option>Other</option>
             </select>
 
-            <label>Location</label>
-            <input type="text" name="location" placeholder="e.g. Library, Block 2 Room 204" required>
+            <label>Where?</label>
+            <select name="place" required>
+                <option>Library</option>
+                <option>Mess</option>
+                <option>Canteen</option>
+                <option>Cricket Ground</option>
+                <option>Parking</option>
+                <option>Academic Block</option>
+                <option>Hostel</option>
+                <option>Other</option>
+            </select>
+
+            <label>Place details (optional)</label>
+            <input type="text" name="place_details" placeholder="e.g. Room 204, near the pavilion, bike row B">
+
+            <label>Date (optional)</label>
+            <input type="date" name="event_date">
+
+            <label>Approximate time (optional)</label>
+            <input type="time" name="event_time">
 
             <button type="submit" class="btn-full">Submit</button>
         </form>

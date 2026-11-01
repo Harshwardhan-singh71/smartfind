@@ -25,7 +25,7 @@ def home():
         query += " AND (title LIKE ? OR description LIKE ? OR location LIKE ? OR category LIKE ?)"
         like = f"%{q}%"
         params += [like, like, like, like]
-    if status in ("lost", "found"):
+    if status in ("lost", "found", "seen"):
         query += " AND status = ?"
         params.append(status)
 
@@ -36,7 +36,6 @@ def home():
     conn.close()
     return render_template("index.html", items=items, q=q, status=status)
 
-
 @app.route("/report", methods=["GET", "POST"])
 def report():
     if "user_id" not in session:
@@ -44,19 +43,33 @@ def report():
         return redirect(url_for("login"))
 
     if request.method == "POST":
+        status = request.form["status"]
+        if status not in ("lost", "found", "seen"):
+            flash("Invalid post type.")
+            return redirect(url_for("report"))
+
+        place = request.form["place"].strip()
+        details = request.form.get("place_details", "").strip()
+        location = f"{place}, {details}" if details else place
+
         conn = get_db()
         conn.execute(
-            "INSERT INTO items (title, description, category, location, status, contact_name, contact_email, user_id) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO items (title, description, category, location, status, "
+            "contact_name, contact_email, user_id, place, place_details, event_date, event_time) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 request.form["title"],
                 request.form["description"],
                 request.form["category"],
-                request.form["location"],
-                request.form["status"],
+                location,
+                status,
                 session["user_name"],
                 session["user_email"],
                 session["user_id"],
+                place,
+                details,
+                request.form.get("event_date", "").strip(),
+                request.form.get("event_time", "").strip(),
             ),
         )
         conn.commit()
@@ -140,10 +153,12 @@ def matches(item_id):
         conn.close()
         return "Item not found", 404
 
-    opposite = "found" if item["status"] == "lost" else "lost"
+    wanted = ("found", "seen") if item["status"] == "lost" else ("lost",)
+    placeholders = ",".join("?" * len(wanted))
     candidates = conn.execute(
-        "SELECT * FROM items WHERE status = ? AND (resolved = 0 OR resolved IS NULL)",
-        (opposite,),
+        f"SELECT * FROM items WHERE status IN ({placeholders}) "
+        "AND (resolved = 0 OR resolved IS NULL)",
+        wanted,
     ).fetchall()
     conn.close()
 

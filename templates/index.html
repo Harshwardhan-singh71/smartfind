@@ -16,6 +16,7 @@
         <a class="tab {% if not status %}active{% endif %}" href="/?q={{ q }}">All</a>
         <a class="tab {% if status == 'lost' %}active{% endif %}" href="/?status=lost&q={{ q }}">Lost</a>
         <a class="tab {% if status == 'found' %}active{% endif %}" href="/?status=found&q={{ q }}">Found</a>
+        <a class="tab {% if status == 'seen' %}active{% endif %}" href="/?status=seen&q={{ q }}">Seen</a>
     </div>
 
     {% for item in items %}
@@ -27,6 +28,9 @@
         <h3>{{ item.title }}</h3>
         <p>{{ item.description }}</p>
         <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
+                {% if item.event_date %}
+            <p class="meta">🕒 {{ item.event_date }}{% if item.event_time %}, {{ item.event_time }}{% endif %}</p>
+        {% endif %}
 
         {% if session.user_id %}
             <p class="meta">👤 {{ item.contact_name }} ({{ item.contact_email }})</p>

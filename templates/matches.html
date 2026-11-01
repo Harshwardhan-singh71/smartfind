@@ -13,7 +13,7 @@
         <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
     </div>
 
-    <h2>Suggested {{ 'found' if item.status == 'lost' else 'lost' }} items</h2>
+      <h2>Suggested matches</h2>
     {% if results %}
         {% for match, percent in results %}
         <div class="card">
