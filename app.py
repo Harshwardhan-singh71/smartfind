@@ -1,6 +1,7 @@
 import sqlite3
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
+from matcher import find_matches
 
 app = Flask(__name__)
 app.secret_key = "change-this-to-any-long-random-text-123"
@@ -130,6 +131,24 @@ def resolve(item_id):
     conn.commit()
     conn.close()
     return redirect(url_for("home"))
+
+@app.route("/matches/<int:item_id>")
+def matches(item_id):
+    conn = get_db()
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        conn.close()
+        return "Item not found", 404
+
+    opposite = "found" if item["status"] == "lost" else "lost"
+    candidates = conn.execute(
+        "SELECT * FROM items WHERE status = ? AND (resolved = 0 OR resolved IS NULL)",
+        (opposite,),
+    ).fetchall()
+    conn.close()
+
+    results = find_matches(item, candidates)
+    return render_template("matches.html", item=item, results=results)
 
 if __name__ == "__main__":
     app.run(debug=True)
