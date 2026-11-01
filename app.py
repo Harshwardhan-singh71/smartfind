@@ -60,8 +60,15 @@ def home():
 
     conn = get_db()
     items = conn.execute(query, params).fetchall()
+    stats = {
+        "total": conn.execute("SELECT COUNT(*) FROM items").fetchone()[0],
+        "returned": conn.execute("SELECT COUNT(*) FROM items WHERE resolved = 1").fetchone()[0],
+        "open": conn.execute(
+            "SELECT COUNT(*) FROM items WHERE resolved = 0 OR resolved IS NULL"
+        ).fetchone()[0],
+    }
     conn.close()
-    return render_template("index.html", items=items, q=q, status=status)
+    return render_template("index.html", items=items, q=q, status=status, stats=stats)
 
 @app.route("/report", methods=["GET", "POST"])
 def report():

@@ -3,14 +3,29 @@
 {% block title %}SmartFind: Campus Lost &amp; Found{% endblock %}
 
 {% block content %}
-    <h1 class="page-title">Campus Lost &amp; Found</h1>
-    <p class="subtitle">One place for everything lost or found at Dayananda Sagar University.</p>
+    <section class="hero">
+        <div class="hero-card">
+            <h1>Lost something on campus?</h1>
+            <p>One place for everything lost, found or seen at Dayananda Sagar University.</p>
 
-    <form method="GET" class="search-bar">
-        <input type="text" name="q" value="{{ q }}" placeholder="Search by item, place or category...">
-        <input type="hidden" name="status" value="{{ status }}">
-        <button type="submit">Search</button>
-    </form>
+            <form method="GET" class="hero-search">
+                <input type="text" name="q" value="{{ q }}" placeholder="Search for a bottle, wallet, ID card, keys...">
+                <input type="hidden" name="status" value="{{ status }}">
+                <button type="submit">Search</button>
+            </form>
+
+            <div class="hero-actions">
+                <a class="btn btn-accent" href="/report?type=lost">I lost something</a>
+                <a class="btn btn-outline" href="/report?type=found">I found something</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="stats">
+        <div class="stat"><span class="stat-number">{{ stats.total }}</span><span class="stat-label">Items reported</span></div>
+        <div class="stat"><span class="stat-number">{{ stats.open }}</span><span class="stat-label">Still open</span></div>
+        <div class="stat"><span class="stat-number">{{ stats.returned }}</span><span class="stat-label">Returned to owners</span></div>
+    </section>
 
     <div class="tabs">
         <a class="tab {% if not status %}active{% endif %}" href="/?q={{ q }}">All</a>
@@ -26,12 +41,12 @@
             <span class="meta">{{ item.date_reported }}</span>
         </div>
         <h3>{{ item.title }}</h3>
-                {% if item.image %}
+        {% if item.image %}
             <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
         {% endif %}
         <p>{{ item.description }}</p>
         <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
-                {% if item.event_date %}
+        {% if item.event_date %}
             <p class="meta">🕒 {{ item.event_date }}{% if item.event_time %}, {{ item.event_time }}{% endif %}</p>
         {% endif %}
 
