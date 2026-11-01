@@ -1,45 +1,38 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Possible Matches - SmartFind</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 0 15px; }
-        .item { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-        .score { float: right; background: #337ab7; color: white; padding: 4px 10px; border-radius: 4px; }
-        .tag { padding: 2px 8px; border-radius: 4px; color: white; font-size: 12px; }
-        .lost { background: #d9534f; }
-        .found { background: #5cb85c; }
-    </style>
-</head>
-<body>
-    <h1>Possible Matches</h1>
-    <div class="item" style="background: #f7f7f7;">
+{% extends "base.html" %}
+
+{% block title %}Possible Matches - SmartFind{% endblock %}
+
+{% block content %}
+    <h1 class="page-title">Possible Matches</h1>
+    <p class="subtitle">Items our AI thinks could be the same thing.</p>
+
+    <div class="card" style="background: #eef2ff;">
         <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
         <h3>{{ item.title }}</h3>
         <p>{{ item.description }}</p>
-        <p><b>Location:</b> {{ item.location }} | <b>Category:</b> {{ item.category }}</p>
+        <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
     </div>
 
     <h2>Suggested {{ 'found' if item.status == 'lost' else 'lost' }} items</h2>
     {% if results %}
         {% for match, percent in results %}
-        <div class="item">
-            <span class="score">{{ percent }}% match</span>
-            <span class="tag {{ match.status }}">{{ match.status|upper }}</span>
+        <div class="card">
+            <div class="card-top">
+                <span class="tag {{ match.status }}">{{ match.status|upper }}</span>
+                <span class="score">{{ percent }}% match</span>
+            </div>
             <h3>{{ match.title }}</h3>
             <p>{{ match.description }}</p>
-            <p><b>Location:</b> {{ match.location }} | <b>Category:</b> {{ match.category }}</p>
-                       {% if session.user_id %}
-                <p><b>Contact:</b> {{ match.contact_name }} ({{ match.contact_email }})</p>
+            <p class="meta">📍 {{ match.location }} &nbsp;·&nbsp; 🏷️ {{ match.category }}</p>
+            {% if session.user_id %}
+                <p class="meta">👤 {{ match.contact_name }} ({{ match.contact_email }})</p>
             {% else %}
-                <p><i><a href="/login">Log in</a> to see contact details.</i></p>
+                <p class="meta"><a href="/login">Log in</a> to see contact details.</p>
             {% endif %}
         </div>
         {% endfor %}
     {% else %}
-        <p>No likely matches yet. Check back after more items are reported.</p>
+        <p class="empty">No likely matches yet. Check back after more items are reported.</p>
     {% endif %}
-    <p><a href="/">Back to all items</a></p>
-</body>
-</html>
+    <p><a href="/">← Back to all items</a></p>
+{% endblock %}

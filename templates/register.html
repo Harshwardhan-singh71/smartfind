@@ -1,35 +1,24 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Register - SmartFind</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 400px; margin: 30px auto; padding: 0 15px; }
-        label { display: block; margin-top: 12px; font-weight: bold; }
-        input { width: 100%; padding: 8px; margin-top: 4px; box-sizing: border-box; }
-        button { margin-top: 18px; padding: 10px 20px; cursor: pointer; }
-        .error { background: #f8d7da; padding: 8px; border-radius: 4px; margin-top: 10px; }
-    </style>
-</head>
-<body>
-    <h1>Register</h1>
-    {% with messages = get_flashed_messages() %}
-        {% for message in messages %}
-            <div class="error">{{ message }}</div>
-        {% endfor %}
-    {% endwith %}
-    <form method="POST">
-        <label>Name</label>
-        <input type="text" name="name" required>
+{% extends "base.html" %}
 
-        <label>Email</label>
-        <input type="email" name="email" required>
+{% block title %}Register - SmartFind{% endblock %}
 
-        <label>Password</label>
-        <input type="password" name="password" required>
+{% block content %}
+    <div class="card form-card">
+        <h1 class="page-title">Create an account</h1>
+        <p class="subtitle">So people can reach you when an item is found.</p>
 
-        <button type="submit">Create account</button>
-    </form>
-    <p><a href="/">Back to all items</a></p>
-</body>
-</html>
+        <form method="POST">
+            <label>Name</label>
+            <input type="text" name="name" required>
+
+            <label>Email</label>
+            <input type="email" name="email" required>
+
+            <label>Password</label>
+            <input type="password" name="password" placeholder="At least 6 characters" required>
+
+            <button type="submit" class="btn-full">Create account</button>
+        </form>
+        <p class="meta" style="margin-top: 16px;">Already registered? <a href="/login">Login</a></p>
+    </div>
+{% endblock %}

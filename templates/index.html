@@ -1,55 +1,51 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>SmartFind</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 30px auto; padding: 0 15px; }
-        .item { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-        .tag { padding: 2px 8px; border-radius: 4px; color: white; font-size: 12px; }
-        .lost { background: #d9534f; }
-        .found { background: #5cb85c; }
-    </style>
-</head>
-<body>
-    <h1>SmartFind: Campus Lost &amp; Found</h1>
-        <p>
-        {% if session.user_id %}
-            Hello, {{ session.user_name }} | <a href="/logout">Logout</a>
-        {% else %}
-            <a href="/login">Login</a> | <a href="/register">Register</a>
-        {% endif %}
-    </p>
-        <p><a href="/report">+ Report a lost or found item</a></p>
-            <form method="GET" style="margin-bottom: 20px;">
-        <input type="text" name="q" value="{{ q }}" placeholder="Search items..." style="padding: 8px; width: 55%;">
-        <select name="status" style="padding: 8px;">
-            <option value="">All</option>
-            <option value="lost" {% if status == 'lost' %}selected{% endif %}>Lost</option>
-            <option value="found" {% if status == 'found' %}selected{% endif %}>Found</option>
-        </select>
-        <button type="submit" style="padding: 8px 14px;">Search</button>
+{% extends "base.html" %}
+
+{% block title %}SmartFind: Campus Lost &amp; Found{% endblock %}
+
+{% block content %}
+    <h1 class="page-title">Campus Lost &amp; Found</h1>
+    <p class="subtitle">One place for everything lost or found at Dayananda Sagar University.</p>
+
+    <form method="GET" class="search-bar">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search by item, place or category...">
+        <input type="hidden" name="status" value="{{ status }}">
+        <button type="submit">Search</button>
     </form>
+
+    <div class="tabs">
+        <a class="tab {% if not status %}active{% endif %}" href="/?q={{ q }}">All</a>
+        <a class="tab {% if status == 'lost' %}active{% endif %}" href="/?status=lost&q={{ q }}">Lost</a>
+        <a class="tab {% if status == 'found' %}active{% endif %}" href="/?status=found&q={{ q }}">Found</a>
+    </div>
+
     {% for item in items %}
-        <div class="item" {% if item.resolved %}style="opacity: 0.6;"{% endif %}>
-        <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
+    <div class="card {% if item.resolved %}resolved{% endif %}">
+        <div class="card-top">
+            <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
+            <span class="meta">{{ item.date_reported }}</span>
+        </div>
         <h3>{{ item.title }}</h3>
         <p>{{ item.description }}</p>
-        <p><b>Location:</b> {{ item.location }} | <b>Category:</b> {{ item.category }}</p>
-                {% if session.user_id %}
-            <p><b>Contact:</b> {{ item.contact_name }} ({{ item.contact_email }})</p>
+        <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
+
+        {% if session.user_id %}
+            <p class="meta">👤 {{ item.contact_name }} ({{ item.contact_email }})</p>
         {% else %}
-            <p><i><a href="/login">Log in</a> to see contact details.</i></p>
+            <p class="meta"><a href="/login">Log in</a> to see contact details.</p>
         {% endif %}
-                <p><a href="/matches/{{ item.id }}">See possible matches</a></p>
-                {% if item.resolved %}
+
+        {% if item.resolved %}
             <p><b>✔ Returned / resolved</b></p>
-        {% elif session.user_id and session.user_id == item.user_id %}
-            <form method="POST" action="/resolve/{{ item.id }}">
-                <button type="submit">Mark as returned</button>
-            </form>
+        {% else %}
+            <a class="btn btn-outline" href="/matches/{{ item.id }}">See possible matches</a>
+            {% if session.user_id and session.user_id == item.user_id %}
+                <form method="POST" action="/resolve/{{ item.id }}" style="display: inline;">
+                    <button type="submit">Mark as returned</button>
+                </form>
+            {% endif %}
         {% endif %}
     </div>
+    {% else %}
+        <p class="empty">No items found. Try a different search, or <a href="/report">report an item</a>.</p>
     {% endfor %}
-</body>
-</html>
+{% endblock %}
