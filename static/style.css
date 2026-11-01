@@ -246,3 +246,57 @@ h1, h2, h3 { font-weight: 800; }
     .hero-card h1 { font-size: 26px; }
     .hero-search { flex-direction: column; }
 }
+
+/* ===== Restyle the inner pages in the campus theme ===== */
+
+/* Form pages (register, login, report) get the same pattern band as the home hero */
+.container:has(> .form-card) {
+    background-color: var(--primary);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160' fill='none' stroke='white' stroke-opacity='0.18' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M30 20h10v8l4 6v28a4 4 0 0 1-4 4H30a4 4 0 0 1-4-4V34l4-6z'/%3E%3Ccircle cx='100' cy='36' r='9'/%3E%3Cpath d='M109 36h29M128 36v8M136 36v8'/%3E%3Crect x='22' y='100' width='34' height='24' rx='5'/%3E%3Cpath d='M22 108h34'/%3E%3Ccircle cx='48' cy='116' r='2'/%3E%3Cpath d='M96 112a22 22 0 0 1 44 0z'/%3E%3Cpath d='M118 112v16a4 4 0 0 1-8 0'/%3E%3Ccircle cx='72' cy='76' r='3'/%3E%3Ccircle cx='148' cy='84' r='3'/%3E%3C/svg%3E");
+    border-radius: 16px;
+    padding: 36px 16px;
+}
+.form-card { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2); }
+
+/* Page titles get the short orange bar */
+.page-title::after {
+    content: "";
+    display: block;
+    width: 56px;
+    height: 5px;
+    background: var(--accent);
+    margin-top: 10px;
+}
+.page-title { margin-bottom: 8px; }
+
+/* Main submit buttons in orange */
+.btn-full { background: var(--accent); }
+.btn-full:hover { background: var(--accent-dark); }
+
+/* Match percentage badge */
+.score { background: var(--accent); }
+
+/* Highlighted card on the matches page */
+.card[style*="eef2ff"] {
+    background: #fff3ec !important;
+    border-left: 5px solid var(--accent);
+}
+
+/* Messages */
+.flash {
+    background: #fff3ec;
+    border: 1px solid #ffd2bd;
+    border-left: 5px solid var(--accent);
+}
+
+/* Links and outline buttons */
+a { color: var(--primary); }
+.btn-outline { color: var(--primary); border-color: var(--primary); }
+.btn-outline:hover { background: #eef0fa; }
+
+/* Footer */
+footer {
+    background: var(--primary);
+    color: rgba(255, 255, 255, 0.8);
+    margin-top: 40px;
+}
