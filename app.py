@@ -1,11 +1,38 @@
+import os
 import sqlite3
+import uuid
+
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
+
 from matcher import find_matches
 
 app = Flask(__name__)
 app.secret_key = "change-this-to-any-long-random-text-123"
 
+UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads")
+ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  
+
+
+def save_image(file):
+    """Save an uploaded photo and return its stored file name, or None."""
+    if not file or not file.filename:
+        return None
+    extension = secure_filename(file.filename).rsplit(".", 1)[-1].lower()
+    if extension not in ALLOWED_EXTENSIONS:
+        return None
+    filename = f"{uuid.uuid4().hex}.{extension}"
+    file.save(os.path.join(UPLOAD_FOLDER, filename))
+    return filename
+
+
+@app.errorhandler(413)
+def too_large(error):
+    flash("Photo is too large. Maximum size is 20 MB.")
+    return redirect(url_for("report"))
 
 def get_db():
     conn = sqlite3.connect("smartfind.db")
@@ -48,6 +75,12 @@ def report():
             flash("Invalid post type.")
             return redirect(url_for("report"))
 
+        photo = request.files.get("photo")
+        image_name = save_image(photo)
+        if photo and photo.filename and image_name is None:
+            flash("Photo must be a PNG, JPG or WEBP file.")
+            return redirect(url_for("report"))
+
         place = request.form["place"].strip()
         details = request.form.get("place_details", "").strip()
         location = f"{place}, {details}" if details else place
@@ -55,8 +88,9 @@ def report():
         conn = get_db()
         conn.execute(
             "INSERT INTO items (title, description, category, location, status, "
-            "contact_name, contact_email, user_id, place, place_details, event_date, event_time) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "contact_name, contact_email, user_id, place, place_details, "
+            "event_date, event_time, image) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 request.form["title"],
                 request.form["description"],
@@ -70,6 +104,7 @@ def report():
                 details,
                 request.form.get("event_date", "").strip(),
                 request.form.get("event_time", "").strip(),
+                image_name,
             ),
         )
         conn.commit()

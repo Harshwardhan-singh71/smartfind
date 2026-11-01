@@ -26,6 +26,9 @@
             <span class="meta">{{ item.date_reported }}</span>
         </div>
         <h3>{{ item.title }}</h3>
+                {% if item.image %}
+            <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
+        {% endif %}
         <p>{{ item.description }}</p>
         <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
                 {% if item.event_date %}

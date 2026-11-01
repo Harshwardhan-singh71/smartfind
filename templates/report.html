@@ -7,13 +7,16 @@
         <h1 class="page-title">Report an Item</h1>
         <p class="subtitle">Tell us what you lost, found or saw.</p>
 
-        <form method="POST">
+        <form method="POST" enctype="multipart/form-data">
             <label>I have...</label>
             <select name="status" required>
                 <option value="lost">Lost something</option>
                 <option value="found">Found something</option>
                 <option value="seen">Seen something (I don't have it)</option>
             </select>
+
+            <label>Photo (optional, PNG/JPG/WEBP, max 20 MB)</label>
+            <input type="file" name="photo" accept="image/*">
 
             <label>Item name</label>
             <input type="text" name="title" placeholder="e.g. Blue water bottle" required>
@@ -33,17 +36,24 @@
                 <option>Other</option>
             </select>
 
-            <label>Where?</label>
-            <select name="place" required>
-                <option>Library</option>
-                <option>Mess</option>
-                <option>Canteen</option>
-                <option>Cricket Ground</option>
-                <option>Parking</option>
-                <option>Academic Block</option>
-                <option>Hostel</option>
-                <option>Other</option>
-            </select>
+                        <label>Where?</label>
+            <input type="text" name="place" list="place-options" placeholder="Pick from the list or type your own" required>
+            <datalist id="place-options">
+                <option value="Library">
+                <option value="Mess">
+                <option value="Canteen">
+                <option value="Cricket Ground">
+                <option value="Parking">
+                <option value="Classroom">
+                <option value="Lecture Hall">
+                <option value="Lab">
+                <option value="Professor Cabin">
+                <option value="Auditorium">
+                <option value="Sports Complex">
+                <option value="Bus Stop">
+                <option value="Academic Block">
+                <option value="Hostel">
+            </datalist>
 
             <label>Place details (optional)</label>
             <input type="text" name="place_details" placeholder="e.g. Room 204, near the pavilion, bike row B">

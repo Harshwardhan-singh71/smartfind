@@ -9,6 +9,9 @@
     <div class="card" style="background: #eef2ff;">
         <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
         <h3>{{ item.title }}</h3>
+                {% if item.image %}
+            <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
+        {% endif %}
         <p>{{ item.description }}</p>
         <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
     </div>
@@ -22,6 +25,9 @@
                 <span class="score">{{ percent }}% match</span>
             </div>
             <h3>{{ match.title }}</h3>
+                        {% if match.image %}
+                <img class="item-photo" src="{{ url_for('static', filename='uploads/' + match.image) }}" alt="{{ match.title }}">
+            {% endif %}
             <p>{{ match.description }}</p>
             <p class="meta">📍 {{ match.location }} &nbsp;·&nbsp; 🏷️ {{ match.category }}</p>
             {% if session.user_id %}
