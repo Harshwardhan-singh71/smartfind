@@ -30,7 +30,11 @@
             <h3>{{ match.title }}</h3>
             <p>{{ match.description }}</p>
             <p><b>Location:</b> {{ match.location }} | <b>Category:</b> {{ match.category }}</p>
-            <p><b>Contact:</b> {{ match.contact_name }} ({{ match.contact_email }})</p>
+                       {% if session.user_id %}
+                <p><b>Contact:</b> {{ match.contact_name }} ({{ match.contact_email }})</p>
+            {% else %}
+                <p><i><a href="/login">Log in</a> to see contact details.</i></p>
+            {% endif %}
         </div>
         {% endfor %}
     {% else %}

@@ -36,7 +36,11 @@
         <h3>{{ item.title }}</h3>
         <p>{{ item.description }}</p>
         <p><b>Location:</b> {{ item.location }} | <b>Category:</b> {{ item.category }}</p>
-        <p><b>Contact:</b> {{ item.contact_name }} ({{ item.contact_email }})</p>
+                {% if session.user_id %}
+            <p><b>Contact:</b> {{ item.contact_name }} ({{ item.contact_email }})</p>
+        {% else %}
+            <p><i><a href="/login">Log in</a> to see contact details.</i></p>
+        {% endif %}
                 <p><a href="/matches/{{ item.id }}">See possible matches</a></p>
                 {% if item.resolved %}
             <p><b>✔ Returned / resolved</b></p>
