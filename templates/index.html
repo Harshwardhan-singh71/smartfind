@@ -5,7 +5,7 @@
 {% block content %}
     <section class="hero">
         <div class="hero-card">
-            <h1>Lost something on campus?</h1>
+            <h1>Lost your <span class="rotator" id="rotator">bottle</span> on campus?</h1>
             <p>One place for everything lost, found or seen at Dayananda Sagar University.</p>
 
             <form method="GET" class="hero-search">
@@ -13,11 +13,39 @@
                 <input type="hidden" name="status" value="{{ status }}">
                 <button type="submit">Search</button>
             </form>
+        </div>
 
-            <div class="hero-actions">
-                <a class="btn btn-accent" href="/report?type=lost">I lost something</a>
-                <a class="btn btn-outline" href="/report?type=found">I found something</a>
-            </div>
+        <div class="action-row">
+            <a class="action-card lost" href="/report?type=lost">
+                <span class="action-emoji">😟</span>
+                <span class="action-title">I lost something</span>
+                <span class="action-sub">Post it and let AI find matches</span>
+            </a>
+            <a class="action-card found" href="/report?type=found">
+                <span class="action-emoji">🙌</span>
+                <span class="action-title">I found something</span>
+                <span class="action-sub">Help it reach its owner</span>
+            </a>
+        </div>
+    </section>
+
+    <section class="how">
+        <div class="how-step">
+            <span class="how-num">1</span>
+            <h4>Report</h4>
+            <p>Add a photo, the place and the time</p>
+        </div>
+        <span class="how-arrow">➜</span>
+        <div class="how-step">
+            <span class="how-num">2</span>
+            <h4>AI matches</h4>
+            <p>Lost, found and seen posts are scored by similarity</p>
+        </div>
+        <span class="how-arrow">➜</span>
+        <div class="how-step">
+            <span class="how-num">3</span>
+            <h4>Get it back</h4>
+            <p>Contact the owner and mark it returned</p>
         </div>
     </section>
 
@@ -32,6 +60,7 @@
         <a class="tab {% if status == 'lost' %}active{% endif %}" href="/?status=lost&q={{ q }}">Lost</a>
         <a class="tab {% if status == 'found' %}active{% endif %}" href="/?status=found&q={{ q }}">Found</a>
         <a class="tab {% if status == 'seen' %}active{% endif %}" href="/?status=seen&q={{ q }}">Seen</a>
+        <a class="tab {% if status == 'resolved' %}active{% endif %}" href="/?status=resolved&q={{ q }}">Resolved</a>
     </div>
 
     {% for item in items %}
@@ -66,8 +95,32 @@
                 </form>
             {% endif %}
         {% endif %}
+
+        {% if is_admin %}
+            <form method="POST" action="/delete/{{ item.id }}" style="display: inline;"
+                  onsubmit="return confirm('Delete this post permanently? (admin)');">
+                <button type="submit" class="btn-danger">Delete</button>
+            </form>
+        {% endif %}
     </div>
     {% else %}
-        <p class="empty">No items found. Try a different search, or <a href="/report">report an item</a>.</p>
+        {% if status == 'resolved' %}
+            <p class="empty">No resolved items yet.</p>
+        {% else %}
+            <p class="empty">No items found. Try a different search, or <a href="/report">report an item</a>.</p>
+        {% endif %}
     {% endfor %}
+
+    <script>
+        var words = ["bottle", "wallet", "ID card", "keys", "charger", "notebook", "umbrella"];
+        var i = 0;
+        var el = document.getElementById("rotator");
+        setInterval(function () {
+            i = (i + 1) % words.length;
+            el.textContent = words[i];
+            el.style.animation = "none";
+            void el.offsetWidth;
+            el.style.animation = "";
+        }, 1800);
+    </script>
 {% endblock %}

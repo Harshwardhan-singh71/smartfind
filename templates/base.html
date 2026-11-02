@@ -8,12 +8,27 @@
 </head>
 <body>
     <nav class="navbar">
-        <a class="brand" href="/">🔎 SmartFind</a>
+        <a class="brand" href="/">
+            <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true">
+                <defs>
+                    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0" stop-color="#ffa062"/>
+                        <stop offset="1" stop-color="#ff5e2b"/>
+                    </linearGradient>
+                </defs>
+                <rect width="48" height="48" rx="13" fill="url(#lg)"/>
+                <circle cx="21" cy="21" r="10" fill="none" stroke="white" stroke-width="4"/>
+                <path d="M29 29l10 10" stroke="white" stroke-width="5" stroke-linecap="round"/>
+                <path d="M17 21.5l3 3 6-7" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Smart<span class="brand-find">Find</span></span>
+        </a>
         <div class="nav-links">
             <a href="/">Home</a>
             <a href="/report">Report item</a>
             {% if session.user_id %}
                 <a href="/my-posts">My posts</a>
+                {% if is_admin %}<span class="admin-pill">ADMIN</span>{% endif %}
                 <span class="nav-user">Hi, {{ session.user_name }}</span>
                 <a href="/logout">Logout</a>
             {% else %}

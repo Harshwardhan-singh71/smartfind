@@ -219,6 +219,44 @@ def my_posts():
     ).fetchall()
     conn.close()
     return render_template("my_posts.html", items=items)
+def load_admin_email():
+    """Read the admin email from admin.txt (kept out of Git). No file = no admin."""
+    try:
+        with open(os.path.join(app.root_path, "admin.txt")) as f:
+            return f.read().strip().lower()
+    except OSError:
+        return ""
 
+
+def is_admin_user():
+    admin_email = load_admin_email()
+    return bool(admin_email) and session.get("user_email", "").lower() == admin_email
+
+
+@app.context_processor
+def inject_admin():
+    return {"is_admin": is_admin_user()}
+
+
+@app.route("/delete/<int:item_id>", methods=["POST"])
+def delete_item(item_id):
+    if not is_admin_user():
+        flash("Only the admin can delete posts.")
+        return redirect(url_for("home"))
+
+    conn = get_db()
+    row = conn.execute("SELECT image FROM items WHERE id = ?", (item_id,)).fetchone()
+    conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+
+    if row and row["image"]:
+        try:
+            os.remove(os.path.join(UPLOAD_FOLDER, row["image"]))
+        except OSError:
+            pass
+
+    flash("Post deleted.")
+    return redirect(request.referrer or url_for("home"))
 if __name__ == "__main__":
     app.run(debug=True)
