@@ -6,4 +6,5 @@ instance/
 smartfind.db
 *.db
 static/uploads/
-admin.txtmatcher_backup.txt
+admin.txt
+matcher_backup.txt
