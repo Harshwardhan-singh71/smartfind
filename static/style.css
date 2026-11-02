@@ -300,3 +300,8 @@ footer {
     color: rgba(255, 255, 255, 0.8);
     margin-top: 40px;
 }
+
+
+/* Spacing inside cards */
+.card .btn, .card form { margin-top: 10px; }
+.card .meta a { text-decoration: underline; }
