@@ -46,3 +46,4 @@ Run the scripts in the order shown. The database file (`smartfind.db`) and uploa
 
 ## Author
 Harshwardhan Singh, 2nd year CSE, Dayananda Sagar University
+Kartik Kamakhya, 2nd year CSE, Dayananda Sagar University
