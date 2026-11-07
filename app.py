@@ -94,12 +94,19 @@ def report():
         details = request.form.get("place_details", "").strip()
         location = f"{place}, {details}" if details else place
 
+        # Private question and security desk (only for Found items)
+        private_question = None
+        at_security = 0
+        if status == "found":
+            private_question = request.form.get("private_question", "").strip() or None
+            at_security = 1 if request.form.get("at_security") else 0
+
         conn = get_db()
         conn.execute(
             "INSERT INTO items (title, description, category, location, status, "
             "contact_name, contact_email, user_id, place, place_details, "
-            "event_date, event_time, image) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "event_date, event_time, image, private_question, at_security) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 request.form["title"],
                 request.form["description"],
@@ -114,6 +121,8 @@ def report():
                 request.form.get("event_date", "").strip(),
                 request.form.get("event_time", "").strip(),
                 image_name,
+                private_question,
+                at_security,
             ),
         )
         conn.commit()

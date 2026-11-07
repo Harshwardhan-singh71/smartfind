@@ -1,15 +1,12 @@
 {% extends "base.html" %}
-
 {% block title %}Report an Item - SmartFind{% endblock %}
-
 {% block content %}
     <div class="card form-card">
         <h1 class="page-title">Report an Item</h1>
         <p class="subtitle">Tell us what you lost, found or saw.</p>
-
         <form method="POST" enctype="multipart/form-data">
             <label>I have...</label>
-            <select name="status" required>
+            <select name="status" id="status-select" required>
                 <option value="lost">Lost something</option>
                 <option value="found">Found something</option>
                 <option value="seen">Seen something (I don't have it)</option>
@@ -36,7 +33,7 @@
                 <option>Other</option>
             </select>
 
-                        <label>Where?</label>
+            <label>Where?</label>
             <input type="text" name="place" list="place-options" placeholder="Pick from the list or type your own" required>
             <datalist id="place-options">
                 <option value="Library">
@@ -64,7 +61,39 @@
             <label>Approximate time (optional)</label>
             <input type="time" name="event_time">
 
+            <div id="found-options" style="display: none;">
+                <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
+
+                <label>Private question (optional)</label>
+                <p class="meta" style="margin-top: 2px;">
+                    Ask something only the real owner would know, e.g.
+                    "What sticker is on the bottle?" Don't put the answer
+                    in the question. This is never shown publicly —
+                    claimants must answer it to prove ownership.
+                </p>
+                <input type="text" name="private_question"
+                       placeholder="e.g. What colour is the wallet inside?">
+
+                <label style="margin-top: 16px;">
+                    <input type="checkbox" name="at_security" value="1"
+                           style="width: auto; margin-right: 6px;">
+                    Item is at the security desk
+                </label>
+                <p class="meta" style="margin-top: 2px;">
+                    Tick this if you've handed the item to campus security.
+                </p>
+            </div>
+
             <button type="submit" class="btn-full">Submit</button>
         </form>
     </div>
+    <script>
+        var sel = document.getElementById("status-select");
+        var box = document.getElementById("found-options");
+        function toggle() {
+            box.style.display = sel.value === "found" ? "" : "none";
+        }
+        sel.addEventListener("change", toggle);
+        toggle();
+    </script>
 {% endblock %}
