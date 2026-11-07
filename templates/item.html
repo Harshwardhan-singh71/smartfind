@@ -24,6 +24,9 @@
         {% if item.event_date %}
             <p class="meta">🕒 {{ item.event_date }}{% if item.event_time %}, {{ item.event_time }}{% endif %}</p>
         {% endif %}
+        {% if item.status == 'found' and item.at_security %}
+            <p><b>📦 This item is at the security desk.</b></p>
+        {% endif %}
         {% if item.resolved %}
             <p><b>✔ Returned / resolved</b></p>
         {% endif %}
