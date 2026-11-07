@@ -1,8 +1,10 @@
 import os
 import sqlite3
+import secrets
+import time
 import uuid
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
@@ -119,51 +121,59 @@ def report():
         return redirect(url_for("home"))
     return render_template("report.html")
 
-@app.route("/register", methods=["GET", "POST"])
+@app.route("/register")
 def register():
-    if request.method == "POST":
-        name = request.form["name"].strip()
-        email = request.form["email"].strip().lower()
-        password = request.form["password"]
+    flash("Accounts are created by the admin. Please log in with the email and "
+          "temporary password you were sent.")
+    return redirect(url_for("login"))
 
-        if len(password) < 6:
-            flash("Password must be at least 6 characters.")
-            return render_template("register.html")
+FAILED_LOGINS = {}  # "ip|email" -> [failed count, locked until time]
+MAX_ATTEMPTS = 5
+LOCK_SECONDS = 600
+def is_locked(key):
+    entry = FAILED_LOGINS.get(key)
+    return bool(entry) and entry[1] > time.time()
 
-        conn = get_db()
-        try:
-            conn.execute(
-                "INSERT INTO users (name, email, password_hash) VALUES (?, ?, ?)",
-                (name, email, generate_password_hash(password)),
-            )
-            conn.commit()
-        except sqlite3.IntegrityError:
-            conn.close()
-            flash("That email is already registered.")
-            return render_template("register.html")
-        conn.close()
-        return redirect(url_for("home"))
-    return render_template("register.html")
 
+def record_failure(key):
+    entry = FAILED_LOGINS.setdefault(key, [0, 0])
+    entry[0] += 1
+    if entry[0] >= MAX_ATTEMPTS:
+        entry[1] = time.time() + LOCK_SECONDS
+        entry[0] = 0
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
         email = request.form["email"].strip().lower()
         password = request.form["password"]
+        key = f"{request.remote_addr}|{email}"
+
+        if is_locked(key):
+            return render_template(
+                "no_access.html",
+                message="Too many failed attempts. Please wait 10 minutes and try again, "
+                        "or contact the admin.",
+            ), 429
 
         conn = get_db()
-        user = conn.execute(
-            "SELECT * FROM users WHERE email = ?", (email,)
-        ).fetchone()
+        user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
         conn.close()
 
-        if user and check_password_hash(user["password_hash"], password):
-            session["user_id"] = user["id"]
-            session["user_name"] = user["name"]
-            session["user_email"] = user["email"]
-            return redirect(url_for("home"))
+        if user is None or not check_password_hash(user["password_hash"], password):
+            record_failure(key)
+            flash("Email or password is incorrect. If you think you should have access, "
+                  "contact the admin.")
+            return render_template("login.html")
 
-        flash("Wrong email or password.")
+        FAILED_LOGINS.pop(key, None)
+        session.clear()
+        session["user_id"] = user["id"]
+        session["user_name"] = user["name"]
+        session["user_email"] = user["email"]
+        session["must_change"] = bool(user["must_change_password"])
+        if session["must_change"]:
+            return redirect(url_for("change_password"))
+        return redirect(url_for("home"))
     return render_template("login.html")
 
 
@@ -174,18 +184,20 @@ def logout():
 
 @app.route("/resolve/<int:item_id>", methods=["POST"])
 def resolve(item_id):
-    if "user_id" not in session:
-        flash("Please log in first.")
-        return redirect(url_for("login"))
-
     conn = get_db()
-    conn.execute(
-        "UPDATE items SET resolved = 1 WHERE id = ? AND user_id = ?",
-        (item_id, session["user_id"]),
-    )
+    if is_admin_user():
+        conn.execute("UPDATE items SET resolved = 1 WHERE id = ?", (item_id,))
+    else:
+        conn.execute(
+            "UPDATE items SET resolved = 1 WHERE id = ? AND user_id = ?",
+            (item_id, session["user_id"]),
+        )
     conn.commit()
     conn.close()
-    return redirect(url_for("home"))
+
+    if request.args.get("back") == "my":
+        return redirect(url_for("my_posts"))
+    return redirect(url_for("item_detail", item_id=item_id))
 
 @app.route("/matches/<int:item_id>")
 def matches(item_id):
@@ -195,6 +207,12 @@ def matches(item_id):
         conn.close()
         return "Item not found", 404
 
+    is_poster = session.get("user_id") is not None and session.get("user_id") == item["user_id"]
+    if not (is_poster or is_admin_user()):
+        conn.close()
+        abort(403)
+
+    # A lost item can match found or seen posts; found and seen posts match lost ones.
     wanted = ("found", "seen") if item["status"] == "lost" else ("lost",)
     placeholders = ",".join("?" * len(wanted))
     candidates = conn.execute(
@@ -257,6 +275,127 @@ def delete_item(item_id):
             pass
 
     flash("Post deleted.")
-    return redirect(request.referrer or url_for("home"))
+    return redirect(url_for("home"))
+@app.route("/item/<int:item_id>")
+def item_detail(item_id):
+    conn = get_db()
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    conn.close()
+    if item is None:
+        return "Item not found", 404
+
+    is_owner = "user_id" in session and session["user_id"] == item["user_id"]
+    return render_template("item.html", item=item, is_owner=is_owner)
+PUBLIC_ENDPOINTS = {"login", "register", "static"}
+@app.before_request
+def require_login():
+    """Everything except login, register and the stylesheet needs a signed-in user."""
+    if request.endpoint is None or request.endpoint in PUBLIC_ENDPOINTS:
+        return None
+    if "user_id" not in session:
+        flash("Please log in with your registered email to continue.")
+        return redirect(url_for("login"))
+    if session.get("must_change") and request.endpoint not in ("change_password", "logout"):
+        return redirect(url_for("change_password"))
+    return None
+@app.errorhandler(403)
+def no_access(error):
+    return render_template("no_access.html"), 403
+PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+def temp_password():
+    return "".join(secrets.choice(PASSWORD_CHARS) for _ in range(8))
+@app.route("/admin/users", methods=["GET", "POST"])
+def admin_users():
+    if not is_admin_user():
+        abort(403)
+
+    created = []   # (name, email, temporary password), shown once
+    skipped = []
+
+    if request.method == "POST":
+        conn = get_db()
+        action = request.form.get("action")
+
+        if action == "create":
+            for line in request.form.get("people", "").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = [p.strip() for p in line.split(",")]
+                if len(parts) == 1 and "@" in parts[0]:
+                    name, email = parts[0].split("@")[0], parts[0].lower()
+                elif len(parts) >= 2 and "@" in parts[1]:
+                    name, email = parts[0], parts[1].lower()
+                else:
+                    skipped.append(f"{line}  (use: Name, email)")
+                    continue
+                if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
+                    skipped.append(f"{email}  (already has an account)")
+                    continue
+                password = temp_password()
+                conn.execute(
+                    "INSERT INTO users (name, email, password_hash, must_change_password) "
+                    "VALUES (?, ?, ?, 1)",
+                    (name, email, generate_password_hash(password)),
+                )
+                created.append((name, email, password))
+
+        elif action == "reset":
+            email = request.form.get("email", "").strip().lower()
+            user = conn.execute("SELECT name FROM users WHERE email = ?", (email,)).fetchone()
+            if user and email != load_admin_email():
+                password = temp_password()
+                conn.execute(
+                    "UPDATE users SET password_hash = ?, must_change_password = 1 WHERE email = ?",
+                    (generate_password_hash(password), email),
+                )
+                created.append((user["name"], email, password))
+
+        conn.commit()
+        conn.close()
+
+    conn = get_db()
+    users = conn.execute(
+        "SELECT name, email, must_change_password FROM users "
+        "WHERE lower(email) != ? ORDER BY id DESC",
+        (load_admin_email(),),
+    ).fetchall()
+    conn.close()
+    return render_template("admin_users.html", users=users, created=created, skipped=skipped)
+@app.route("/change-password", methods=["GET", "POST"])
+def change_password():
+    if request.method == "POST":
+        current = request.form["current"]
+        new = request.form["new"]
+        confirm = request.form["confirm"]
+
+        conn = get_db()
+        user = conn.execute("SELECT * FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+
+        error = None
+        if not check_password_hash(user["password_hash"], current):
+            error = "Your current password is wrong."
+        elif len(new) < 8:
+            error = "The new password must be at least 8 characters."
+        elif new != confirm:
+            error = "The two new passwords don't match."
+        elif new == current:
+            error = "Please choose a password different from the current one."
+
+        if error:
+            conn.close()
+            flash(error)
+            return render_template("change_password.html")
+
+        conn.execute(
+            "UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?",
+            (generate_password_hash(new), session["user_id"]),
+        )
+        conn.commit()
+        conn.close()
+        session["must_change"] = False
+        flash("Password updated.")
+        return redirect(url_for("home"))
+    return render_template("change_password.html")
 if __name__ == "__main__":
     app.run(debug=True)

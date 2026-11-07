@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.title }} - SmartFind{% endblock %}
+
+{% block content %}
+    {% set from_id = request.args.get('from') %}
+    {% if from_id %}
+        <p><a href="/matches/{{ from_id }}">← Back to matches</a></p>
+    {% else %}
+        <p><a href="/">← Back to all items</a></p>
+    {% endif %}
+
+    <div class="card detail-card {% if item.resolved %}resolved{% endif %}">
+        <div class="card-top">
+            <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
+            <span class="meta">Posted {{ item.date_reported }}</span>
+        </div>
+        <h1 class="page-title">{{ item.title }}</h1>
+        {% if item.image %}
+            <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
+        {% endif %}
+        <p>{{ item.description }}</p>
+        <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
+        {% if item.event_date %}
+            <p class="meta">🕒 {{ item.event_date }}{% if item.event_time %}, {{ item.event_time }}{% endif %}</p>
+        {% endif %}
+        {% if item.resolved %}
+            <p><b>✔ Returned / resolved</b></p>
+        {% endif %}
+    </div>
+
+    {% if is_owner or is_admin %}
+    <div class="card">
+        <h3>Actions</h3>
+        {% if not from_id %}
+            <a class="btn btn-outline" href="/matches/{{ item.id }}">See possible matches</a>
+        {% endif %}
+
+        {% if not item.resolved %}
+            <form method="POST" action="/resolve/{{ item.id }}" style="display: inline;">
+                <button type="submit">Mark as returned</button>
+            </form>
+        {% endif %}
+
+        {% if is_admin %}
+            <form method="POST" action="/delete/{{ item.id }}" style="display: inline;"
+                  onsubmit="return confirm('Delete this post permanently? (admin)');">
+                <button type="submit" class="btn-danger">Delete</button>
+            </form>
+        {% endif %}
+    </div>
+    {% elif not item.resolved %}
+    <div class="card">
+        <p class="meta">Think this is yours? The claim option arrives in the next step.</p>
+    </div>
+    {% endif %}
+{% endblock %}

@@ -9,36 +9,34 @@
     <div class="card" style="background: #eef2ff;">
         <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
         <h3>{{ item.title }}</h3>
-                {% if item.image %}
+        {% if item.image %}
             <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
         {% endif %}
         <p>{{ item.description }}</p>
         <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
     </div>
 
-      <h2>Suggested matches</h2>
+    <h2>Suggested matches</h2>
     {% if results %}
         {% for match, percent in results %}
-        <div class="card">
-            <div class="card-top">
-                <span class="tag {{ match.status }}">{{ match.status|upper }}</span>
-                <span class="score">{{ percent }}% match</span>
+        <a class="card-link" href="/item/{{ match.id }}?from={{ item.id }}">
+            <div class="card">
+                <div class="card-top">
+                    <span class="tag {{ match.status }}">{{ match.status|upper }}</span>
+                    <span class="score">{{ percent }}% match</span>
+                </div>
+                <h3>{{ match.title }}</h3>
+                {% if match.image %}
+                    <img class="item-photo" src="{{ url_for('static', filename='uploads/' + match.image) }}" alt="{{ match.title }}">
+                {% endif %}
+                <p>{{ (match.description or '')|truncate(100) }}</p>
+                <p class="meta">📍 {{ match.location }} &nbsp;·&nbsp; 🏷️ {{ match.category }}</p>
+                <span class="view-more">View details →</span>
             </div>
-            <h3>{{ match.title }}</h3>
-                        {% if match.image %}
-                <img class="item-photo" src="{{ url_for('static', filename='uploads/' + match.image) }}" alt="{{ match.title }}">
-            {% endif %}
-            <p>{{ match.description }}</p>
-            <p class="meta">📍 {{ match.location }} &nbsp;·&nbsp; 🏷️ {{ match.category }}</p>
-            {% if session.user_id %}
-                <p class="meta">👤 {{ match.contact_name }} ({{ match.contact_email }})</p>
-            {% else %}
-                <p class="meta"><a href="/login">Log in</a> to see contact details.</p>
-            {% endif %}
-        </div>
+        </a>
         {% endfor %}
     {% else %}
         <p class="empty">No likely matches yet. Check back after more items are reported.</p>
     {% endif %}
-    <p><a href="/">← Back to all items</a></p>
+    <p><a href="/item/{{ item.id }}">← Back to this item</a></p>
 {% endblock %}

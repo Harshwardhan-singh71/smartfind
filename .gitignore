@@ -8,3 +8,5 @@ smartfind.db
 static/uploads/
 admin.txt
 matcher_backup.txt
+*.zip
+allowed_emails.txt

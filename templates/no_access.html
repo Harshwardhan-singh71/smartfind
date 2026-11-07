@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Access denied - SmartFind{% endblock %}
+
+{% block content %}
+    <div class="card form-card" style="text-align: center;">
+        <div style="font-size: 52px;">🔒</div>
+        <h1>Access denied</h1>
+        <p>{{ message or "You don't have permission to view this page." }}</p>
+        <a class="btn" href="/login">Back to login</a>
+    </div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+
+{% block title %}Manage users - SmartFind{% endblock %}
+
+{% block content %}
+    <h1 class="page-title">Manage users</h1>
+    <p class="subtitle">Create accounts for students. Each gets a temporary password and must choose their own at first login.</p>
+
+    {% if created %}
+    <div class="card" style="background: #fff3ec;">
+        <h3>Temporary passwords (shown only once, copy and send them now)</h3>
+        <table class="plain-table">
+            <tr><th>Name</th><th>Email</th><th>Temporary password</th></tr>
+            {% for name, email, pw in created %}
+            <tr><td>{{ name }}</td><td>{{ email }}</td><td><code>{{ pw }}</code></td></tr>
+            {% endfor %}
+        </table>
+    </div>
+    {% endif %}
+
+    {% if skipped %}
+    <div class="card">
+        <h3>Skipped</h3>
+        {% for line in skipped %}<p class="meta">{{ line }}</p>{% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="card">
+        <h3>Add students</h3>
+        <form method="POST">
+            <input type="hidden" name="action" value="create">
+            <label>One per line: Name, email</label>
+            <textarea name="people" rows="5" placeholder="Asha Rao, asha@example.com&#10;Ravi Kumar, ravi@example.com"></textarea>
+            <button type="submit" class="btn-full">Create accounts</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Existing users ({{ users|length }})</h3>
+        <table class="plain-table">
+            <tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.name }}</td>
+                <td>{{ u.email }}</td>
+                <td>{% if u.must_change_password %}Must change password{% else %}Active{% endif %}</td>
+                <td>
+                    <form method="POST" style="display: inline;"
+                          onsubmit="return confirm('Give {{ u.email }} a new temporary password?');">
+                        <input type="hidden" name="action" value="reset">
+                        <input type="hidden" name="email" value="{{ u.email }}">
+                        <button type="submit" class="btn-outline">Reset</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+{% endblock %}

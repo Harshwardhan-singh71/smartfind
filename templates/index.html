@@ -45,7 +45,7 @@
         <div class="how-step">
             <span class="how-num">3</span>
             <h4>Get it back</h4>
-            <p>Contact the owner and mark it returned</p>
+            <p>Claim it, prove it's yours, and collect it</p>
         </div>
     </section>
 
@@ -64,45 +64,21 @@
     </div>
 
     {% for item in items %}
-    <div class="card {% if item.resolved %}resolved{% endif %}">
-        <div class="card-top">
-            <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
-            <span class="meta">{{ item.date_reported }}</span>
-        </div>
-        <h3>{{ item.title }}</h3>
-        {% if item.image %}
-            <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
-        {% endif %}
-        <p>{{ item.description }}</p>
-        <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
-        {% if item.event_date %}
-            <p class="meta">🕒 {{ item.event_date }}{% if item.event_time %}, {{ item.event_time }}{% endif %}</p>
-        {% endif %}
-
-        {% if session.user_id %}
-            <p class="meta">👤 {{ item.contact_name }} ({{ item.contact_email }})</p>
-        {% else %}
-            <p class="meta"><a href="/login">Log in</a> to see contact details.</p>
-        {% endif %}
-
-        {% if item.resolved %}
-            <p><b>✔ Returned / resolved</b></p>
-        {% else %}
-            <a class="btn btn-outline" href="/matches/{{ item.id }}">See possible matches</a>
-            {% if session.user_id and session.user_id == item.user_id %}
-                <form method="POST" action="/resolve/{{ item.id }}" style="display: inline;">
-                    <button type="submit">Mark as returned</button>
-                </form>
+    <a class="card-link" href="/item/{{ item.id }}">
+        <div class="card {% if item.resolved %}resolved{% endif %}">
+            <div class="card-top">
+                <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
+                <span class="meta">{{ item.date_reported }}</span>
+            </div>
+            <h3>{{ item.title }}</h3>
+            {% if item.image %}
+                <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
             {% endif %}
-        {% endif %}
-
-        {% if is_admin %}
-            <form method="POST" action="/delete/{{ item.id }}" style="display: inline;"
-                  onsubmit="return confirm('Delete this post permanently? (admin)');">
-                <button type="submit" class="btn-danger">Delete</button>
-            </form>
-        {% endif %}
-    </div>
+            <p>{{ (item.description or '')|truncate(100) }}</p>
+            <p class="meta">📍 {{ item.location }}{% if item.event_date %} &nbsp;·&nbsp; 🕒 {{ item.event_date }}{% endif %}</p>
+            <span class="view-more">View details →</span>
+        </div>
+    </a>
     {% else %}
         {% if status == 'resolved' %}
             <p class="empty">No resolved items yet.</p>

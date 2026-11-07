@@ -411,3 +411,16 @@ footer {
     .how-arrow { transform: rotate(90deg); text-align: center; }
     .action-row { grid-template-columns: 1fr; }
 }
+
+/* Clickable cards and the detail page */
+.card-link { display: block; color: inherit; }
+.card-link:hover { text-decoration: none; }
+.card-link .card h3 { color: var(--primary); }
+.view-more { color: var(--accent-dark); font-weight: 700; font-size: 14px; }
+.card .item-photo { max-height: 200px; }
+.detail-card .item-photo { max-height: 420px; }
+
+/* Tables on the admin page */
+.plain-table { width: 100%; border-collapse: collapse; }
+.plain-table th, .plain-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
+code { background: #fff; border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; }
