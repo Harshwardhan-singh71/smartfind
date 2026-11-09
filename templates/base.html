@@ -28,7 +28,27 @@
             <a href="/report">Report item</a>
             {% if session.user_id %}
                 <a href="/activity">My activity</a>
-                                {% if is_admin %}<a href="/admin/users">Manage users</a><a href="/admin/activity">Activity log</a><span class="admin-pill">ADMIN</span>{% endif %}
+                <div class="bell-wrap">
+                    <button type="button" class="bell" id="bell-btn" aria-label="Notifications">🔔{% if unread_count %}<span class="badge">{{ unread_count }}</span>{% endif %}</button>
+                    <div class="bell-menu" id="bell-menu">
+                        <div class="bell-head">
+                            <b>Notifications</b>
+                            <form method="POST" action="/notifications/read-all">
+                                <button type="submit" class="bell-link">Mark all as read</button>
+                            </form>
+                        </div>
+                        {% for n in recent_notifications %}
+                            <a class="bell-item {% if not n.is_read %}unread{% endif %}" href="/notifications/{{ n.id }}/go">
+                                {{ n.message }}
+                                <span class="meta">{{ n.created_at }}</span>
+                            </a>
+                        {% else %}
+                            <p class="bell-empty">No notifications yet.</p>
+                        {% endfor %}
+                        <a class="bell-foot" href="/notifications">See all notifications →</a>
+                    </div>
+                </div>
+                {% if is_admin %}<a href="/admin/users">Manage users</a><a href="/admin/activity">Activity log</a><span class="admin-pill">ADMIN</span>{% endif %}
                 <span class="nav-user">Hi, {{ session.user_name }}</span>
                 <a href="/logout">Logout</a>
             {% else %}
@@ -47,5 +67,23 @@
     </main>
 
     <footer>SmartFind · Dayananda Sagar University</footer>
+
+    <script>
+        (function () {
+            var btn = document.getElementById("bell-btn");
+            var menu = document.getElementById("bell-menu");
+            if (!btn || !menu) return;
+            btn.addEventListener("click", function (e) {
+                e.stopPropagation();
+                menu.classList.toggle("open");
+            });
+            document.addEventListener("click", function (e) {
+                if (!menu.contains(e.target)) menu.classList.remove("open");
+            });
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape") menu.classList.remove("open");
+            });
+        })();
+    </script>
 </body>
 </html>

@@ -498,6 +498,11 @@ def claim(item_id):
             "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
             (item_id, cur.lastrowid, session["user_id"], "claim_created"),
         )
+        notify(
+            conn, item["user_id"],
+            f'{session["user_name"]} claimed your item "{item["title"]}".',
+            url_for("item_detail", item_id=item_id),
+        )
         conn.commit()
         conn.close()
         flash("Claim sent. The finder will review it.")
@@ -528,6 +533,8 @@ def decide_claim(claim_id):
         flash("This claim has already been decided.")
         return redirect(url_for("item_detail", item_id=item["id"]))
 
+    link = url_for("item_detail", item_id=item["id"])
+
     if action == "accept":
         already = conn.execute(
             "SELECT 1 FROM claims WHERE item_id = ? AND status = 'accepted'",
@@ -536,7 +543,12 @@ def decide_claim(claim_id):
         if already:
             conn.close()
             flash("You have already accepted a claim for this item.")
-            return redirect(url_for("item_detail", item_id=item["id"]))
+            return redirect(link)
+        others = conn.execute(
+            "SELECT claimant_id FROM claims "
+            "WHERE item_id = ? AND id != ? AND status = 'pending'",
+            (item["id"], claim_id),
+        ).fetchall()
         conn.execute(
             "UPDATE claims SET status = 'accepted', decided_at = CURRENT_TIMESTAMP WHERE id = ?",
             (claim_id,),
@@ -550,6 +562,17 @@ def decide_claim(claim_id):
             "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
             (item["id"], claim_id, session["user_id"], "claim_accepted"),
         )
+        notify(
+            conn, claim["claimant_id"],
+            f'Your claim on "{item["title"]}" was accepted. The finder will arrange the handover.',
+            link,
+        )
+        for o in others:
+            notify(
+                conn, o["claimant_id"],
+                f'Your claim on "{item["title"]}" was not accepted.',
+                link,
+            )
         flash("Claim accepted. Other pending claims were rejected.")
     else:
         conn.execute(
@@ -560,11 +583,16 @@ def decide_claim(claim_id):
             "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
             (item["id"], claim_id, session["user_id"], "claim_rejected"),
         )
+        notify(
+            conn, claim["claimant_id"],
+            f'Your claim on "{item["title"]}" was not accepted.',
+            link,
+        )
         flash("Claim rejected.")
 
     conn.commit()
     conn.close()
-    return redirect(url_for("item_detail", item_id=item["id"]))
+    return redirect(link)
 @app.route("/activity")
 def activity():
     uid = session["user_id"]
@@ -701,5 +729,68 @@ def admin_activity():
         "admin_activity.html", rows=rows, q=q, action=action,
         page=page, has_next=has_next,
     )
+def notify(conn, user_id, message, link=None):
+    conn.execute(
+        "INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
+        (user_id, message, link),
+    )
+
+
+@app.context_processor
+def inject_notifications():
+    count = 0
+    recent = []
+    if "user_id" in session:
+        conn = get_db()
+        count = conn.execute(
+            "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND is_read = 0",
+            (session["user_id"],),
+        ).fetchone()[0]
+        recent = conn.execute(
+            "SELECT id, message, link, is_read, created_at FROM notifications "
+            "WHERE user_id = ? ORDER BY id DESC LIMIT 5",
+            (session["user_id"],),
+        ).fetchall()
+        conn.close()
+    return {"unread_count": count, "recent_notifications": recent}
+
+
+@app.route("/notifications")
+def notifications():
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT * FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 100",
+        (session["user_id"],),
+    ).fetchall()
+    conn.close()
+    return render_template("notifications.html", rows=rows)
+
+
+@app.route("/notifications/<int:nid>/go")
+def notification_go(nid):
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM notifications WHERE id = ? AND user_id = ?",
+        (nid, session["user_id"]),
+    ).fetchone()
+    if row is None:
+        conn.close()
+        abort(404)
+    conn.execute("UPDATE notifications SET is_read = 1 WHERE id = ?", (nid,))
+    conn.commit()
+    conn.close()
+    return redirect(row["link"] or url_for("notifications"))
+
+
+@app.route("/notifications/read-all", methods=["POST"])
+def notifications_read_all():
+    conn = get_db()
+    conn.execute(
+        "UPDATE notifications SET is_read = 1 WHERE user_id = ?",
+        (session["user_id"],),
+    )
+    conn.commit()
+    conn.close()
+    return redirect(url_for("notifications"))
 if __name__ == "__main__":
     app.run(debug=True)
