@@ -52,12 +52,55 @@
             </form>
         {% endif %}
     </div>
-          {% elif not item.resolved and item.status in ('found', 'lost') %}
+    {% elif not item.resolved and item.status in ('found', 'lost') %}
     <div class="card">
         {% if item.status == 'found' %}
-            <p class="meta">Think this is yours? The claim option arrives in the next step.</p>
+            {% if my_claim %}
+                {% if my_claim.status == 'pending' %}
+                    <p class="meta">✅ You have claimed this item. Waiting for the finder to review it.</p>
+                {% elif my_claim.status == 'accepted' %}
+                    <p><b>🎉 Your claim was accepted!</b></p>
+                    <p class="meta">Chat with the finder is coming in a later step.</p>
+                {% else %}
+                    <p class="meta">Your claim was not accepted.</p>
+                {% endif %}
+            {% else %}
+                <p class="meta">Think this is yours?</p>
+                <a class="btn" href="/claim/{{ item.id }}">This is mine</a>
+            {% endif %}
         {% else %}
             <p class="meta">Did you find this? <a href="/report">Post it as a Found item</a> and we'll match it to the owner.</p>
         {% endif %}
     </div>
     {% endif %}
+
+    {% if is_owner and item.status == 'found' %}
+    <div class="card">
+        <h3>Claims on this item</h3>
+        {% if item.private_question %}
+            <p class="meta">Your question: <b>{{ item.private_question }}</b></p>
+        {% endif %}
+        {% if claims %}
+            {% for c in claims %}
+                <div style="border-top: 1px solid var(--border); padding: 12px 0;">
+                    <p><b>{{ c.claimant_name }}</b>
+                       <span class="meta">&nbsp;· {{ c.created_at }} · {{ c.status }}</span></p>
+                    <p>{{ c.answer }}</p>
+                    {% if c.status == 'pending' and not item.resolved %}
+                        <form method="POST" action="/claim/{{ c.id }}/decide" style="display: inline;">
+                            <input type="hidden" name="action" value="accept">
+                            <button type="submit">Accept</button>
+                        </form>
+                        <form method="POST" action="/claim/{{ c.id }}/decide" style="display: inline;">
+                            <input type="hidden" name="action" value="reject">
+                            <button type="submit" class="btn-danger">Reject</button>
+                        </form>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="meta">No claims yet.</p>
+        {% endif %}
+    </div>
+    {% endif %}
+{% endblock %}

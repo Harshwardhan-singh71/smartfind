@@ -295,12 +295,31 @@ def delete_item(item_id):
 def item_detail(item_id):
     conn = get_db()
     item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
-    conn.close()
     if item is None:
+        conn.close()
         return "Item not found", 404
 
     is_owner = "user_id" in session and session["user_id"] == item["user_id"]
-    return render_template("item.html", item=item, is_owner=is_owner)
+    claims = []
+    my_claim = None
+    if item["status"] == "found":
+        if is_owner:
+            claims = conn.execute(
+                "SELECT claims.id, claims.answer, claims.status, claims.created_at, "
+                "users.name AS claimant_name "
+                "FROM claims JOIN users ON users.id = claims.claimant_id "
+                "WHERE claims.item_id = ? ORDER BY claims.id",
+                (item_id,),
+            ).fetchall()
+        elif "user_id" in session:
+            my_claim = conn.execute(
+                "SELECT status FROM claims WHERE item_id = ? AND claimant_id = ?",
+                (item_id, session["user_id"]),
+            ).fetchone()
+    conn.close()
+    return render_template(
+        "item.html", item=item, is_owner=is_owner, claims=claims, my_claim=my_claim
+    )
 PUBLIC_ENDPOINTS = {"login", "register", "static"}
 @app.before_request
 def require_login():
@@ -412,5 +431,207 @@ def change_password():
         flash("Password updated.")
         return redirect(url_for("home"))
     return render_template("change_password.html")
+@app.route("/claim/<int:item_id>", methods=["GET", "POST"])
+def claim(item_id):
+    conn = get_db()
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        conn.close()
+        abort(404)
+
+    if item["status"] != "found" or item["resolved"]:
+        conn.close()
+        flash("This item can't be claimed.")
+        return redirect(url_for("item_detail", item_id=item_id))
+
+    accepted = conn.execute(
+        "SELECT 1 FROM claims WHERE item_id = ? AND status = 'accepted'", (item_id,)
+    ).fetchone()
+    if accepted:
+        conn.close()
+        flash("The finder has already accepted a claim for this item.")
+        return redirect(url_for("item_detail", item_id=item_id))
+
+    if item["user_id"] == session["user_id"]:
+        conn.close()
+        flash("You posted this item, so you can't claim it.")
+        return redirect(url_for("item_detail", item_id=item_id))
+
+    existing = conn.execute(
+        "SELECT 1 FROM claims WHERE item_id = ? AND claimant_id = ?",
+        (item_id, session["user_id"]),
+    ).fetchone()
+    if existing:
+        conn.close()
+        flash("You have already claimed this item. Please wait for the finder.")
+        return redirect(url_for("item_detail", item_id=item_id))
+
+    if request.method == "POST":
+        answer = request.form.get("answer", "").strip()
+        if not answer:
+            conn.close()
+            flash("Please write your answer.")
+            return redirect(url_for("claim", item_id=item_id))
+        cur = conn.execute(
+            "INSERT INTO claims (item_id, claimant_id, answer) VALUES (?, ?, ?)",
+            (item_id, session["user_id"], answer),
+        )
+        conn.execute(
+            "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
+            (item_id, cur.lastrowid, session["user_id"], "claim_created"),
+        )
+        conn.commit()
+        conn.close()
+        flash("Claim sent. The finder will review it.")
+        return redirect(url_for("item_detail", item_id=item_id))
+
+    conn.close()
+    return render_template("claim.html", item=item)
+@app.route("/claim/<int:claim_id>/decide", methods=["POST"])
+def decide_claim(claim_id):
+    action = request.form.get("action")
+    if action not in ("accept", "reject"):
+        abort(400)
+
+    conn = get_db()
+    claim = conn.execute("SELECT * FROM claims WHERE id = ?", (claim_id,)).fetchone()
+    if claim is None:
+        conn.close()
+        abort(404)
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (claim["item_id"],)).fetchone()
+
+    # only the person who posted the found item may decide
+    if item["user_id"] != session["user_id"]:
+        conn.close()
+        abort(403)
+
+    if claim["status"] != "pending" or item["resolved"]:
+        conn.close()
+        flash("This claim has already been decided.")
+        return redirect(url_for("item_detail", item_id=item["id"]))
+
+    if action == "accept":
+        already = conn.execute(
+            "SELECT 1 FROM claims WHERE item_id = ? AND status = 'accepted'",
+            (item["id"],),
+        ).fetchone()
+        if already:
+            conn.close()
+            flash("You have already accepted a claim for this item.")
+            return redirect(url_for("item_detail", item_id=item["id"]))
+        conn.execute(
+            "UPDATE claims SET status = 'accepted', decided_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (claim_id,),
+        )
+        conn.execute(
+            "UPDATE claims SET status = 'rejected', decided_at = CURRENT_TIMESTAMP "
+            "WHERE item_id = ? AND id != ? AND status = 'pending'",
+            (item["id"], claim_id),
+        )
+        conn.execute(
+            "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
+            (item["id"], claim_id, session["user_id"], "claim_accepted"),
+        )
+        flash("Claim accepted. Other pending claims were rejected.")
+    else:
+        conn.execute(
+            "UPDATE claims SET status = 'rejected', decided_at = CURRENT_TIMESTAMP WHERE id = ?",
+            (claim_id,),
+        )
+        conn.execute(
+            "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
+            (item["id"], claim_id, session["user_id"], "claim_rejected"),
+        )
+        flash("Claim rejected.")
+
+    conn.commit()
+    conn.close()
+    return redirect(url_for("item_detail", item_id=item["id"]))
+@app.route("/activity")
+def activity():
+    uid = session["user_id"]
+    view = request.args.get("view", "posts")
+    if view not in ("posts", "sent", "received"):
+        view = "posts"
+    q = request.args.get("q", "").strip()
+    status = request.args.get("status", "")
+    like = f"%{q}%"
+
+    if view == "posts":
+        filters = [("", "All"), ("lost", "Lost"), ("found", "Found"),
+                   ("seen", "Seen"), ("resolved", "Resolved")]
+    else:
+        filters = [("", "All"), ("pending", "Pending"),
+                   ("accepted", "Accepted"), ("rejected", "Rejected")]
+    if status not in [f[0] for f in filters]:
+        status = ""
+
+    conn = get_db()
+
+    if view == "posts":
+        query = (
+            "SELECT items.*, "
+            "(SELECT COUNT(*) FROM claims WHERE claims.item_id = items.id "
+            "AND claims.status = 'pending') AS pending_claims "
+            "FROM items WHERE items.user_id = ?"
+        )
+        params = [uid]
+        if q:
+            query += (" AND (items.title LIKE ? OR items.description LIKE ? "
+                      "OR items.location LIKE ? OR items.category LIKE ?)")
+            params += [like, like, like, like]
+        if status == "resolved":
+            query += " AND items.resolved = 1"
+        elif status:
+            query += " AND items.status = ?"
+            params.append(status)
+        query += " ORDER BY items.date_reported DESC"
+    elif view == "sent":
+        query = (
+            "SELECT claims.id, claims.status AS claim_status, claims.answer, "
+            "claims.created_at, items.id AS item_id, items.title, items.location "
+            "FROM claims JOIN items ON items.id = claims.item_id "
+            "WHERE claims.claimant_id = ?"
+        )
+        params = [uid]
+        if q:
+            query += (" AND (items.title LIKE ? OR items.location LIKE ? "
+                      "OR claims.answer LIKE ?)")
+            params += [like, like, like]
+        if status:
+            query += " AND claims.status = ?"
+            params.append(status)
+        query += " ORDER BY claims.id DESC"
+    else:
+        query = (
+            "SELECT claims.id, claims.status AS claim_status, claims.answer, "
+            "claims.created_at, items.id AS item_id, items.title, "
+            "users.name AS claimant_name "
+            "FROM claims JOIN items ON items.id = claims.item_id "
+            "JOIN users ON users.id = claims.claimant_id "
+            "WHERE items.user_id = ?"
+        )
+        params = [uid]
+        if q:
+            query += (" AND (items.title LIKE ? OR users.name LIKE ? "
+                      "OR claims.answer LIKE ?)")
+            params += [like, like, like]
+        if status:
+            query += " AND claims.status = ?"
+            params.append(status)
+        query += " ORDER BY claims.id DESC"
+
+    rows = conn.execute(query, params).fetchall()
+    pending_received = conn.execute(
+        "SELECT COUNT(*) FROM claims JOIN items ON items.id = claims.item_id "
+        "WHERE items.user_id = ? AND claims.status = 'pending'",
+        (uid,),
+    ).fetchone()[0]
+    conn.close()
+
+    return render_template(
+        "activity.html", rows=rows, view=view, q=q, status=status,
+        filters=filters, pending_received=pending_received,
+    )
 if __name__ == "__main__":
     app.run(debug=True)

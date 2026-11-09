@@ -27,10 +27,11 @@
             <a href="/">Home</a>
             <a href="/report">Report item</a>
             {% if session.user_id %}
-            {% if is_admin %}<a href="/admin/users">Manage users</a><span class="admin-pill">ADMIN</span>{% endif %}
+                <a href="/activity">My activity</a>
+                {% if is_admin %}<a href="/admin/users">Manage users</a><span class="admin-pill">ADMIN</span>{% endif %}
                 <span class="nav-user">Hi, {{ session.user_name }}</span>
                 <a href="/logout">Logout</a>
-                        {% else %}
+            {% else %}
                 <a class="btn-small" href="/login">Login</a>
             {% endif %}
         </div>

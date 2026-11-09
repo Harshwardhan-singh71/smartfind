@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Claim this item - SmartFind{% endblock %}
+{% block content %}
+    <p><a href="/item/{{ item.id }}">← Back to item</a></p>
+    <div class="card form-card">
+        <h1 class="page-title">This is mine</h1>
+        <p class="subtitle">{{ item.title }}</p>
+        <form method="POST">
+            {% if item.private_question %}
+                <label>The finder asks:</label>
+                <p><b>{{ item.private_question }}</b></p>
+                <label>Your answer</label>
+                <textarea name="answer" rows="3" required
+                          placeholder="Answer the question above"></textarea>
+            {% else %}
+                <label>Describe your item so the finder can verify it</label>
+                <textarea name="answer" rows="3" required
+                          placeholder="Colour, brand, marks, what's inside, anything only the owner would know"></textarea>
+            {% endif %}
+            <button type="submit" class="btn-full">Send claim</button>
+        </form>
+        <p class="meta">The finder will see your answer and decide. Your contact details stay private.</p>
+    </div>
+{% endblock %}
