@@ -87,11 +87,15 @@
             <button type="submit" class="btn-full">Submit</button>
         </form>
     </div>
-    <script>
+        <script>
         var sel = document.getElementById("status-select");
         var box = document.getElementById("found-options");
         function toggle() {
             box.style.display = sel.value === "found" ? "" : "none";
+        }
+        var t = new URLSearchParams(window.location.search).get("type");
+        if (t === "lost" || t === "found" || t === "seen") {
+            sel.value = t;
         }
         sel.addEventListener("change", toggle);
         toggle();

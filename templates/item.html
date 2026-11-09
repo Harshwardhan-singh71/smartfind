@@ -52,9 +52,12 @@
             </form>
         {% endif %}
     </div>
-    {% elif not item.resolved %}
+          {% elif not item.resolved and item.status in ('found', 'lost') %}
     <div class="card">
-        <p class="meta">Think this is yours? The claim option arrives in the next step.</p>
+        {% if item.status == 'found' %}
+            <p class="meta">Think this is yours? The claim option arrives in the next step.</p>
+        {% else %}
+            <p class="meta">Did you find this? <a href="/report">Post it as a Found item</a> and we'll match it to the owner.</p>
+        {% endif %}
     </div>
     {% endif %}
-{% endblock %}

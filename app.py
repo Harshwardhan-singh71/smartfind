@@ -54,9 +54,16 @@ def home():
         query += " AND (title LIKE ? OR description LIKE ? OR location LIKE ? OR category LIKE ?)"
         like = f"%{q}%"
         params += [like, like, like, like]
-    if status in ("lost", "found", "seen"):
-        query += " AND status = ?"
-        params.append(status)
+
+    if status == "resolved":
+        # Resolved tab: only items that were returned
+        query += " AND resolved = 1"
+    else:
+        # All / Lost / Found / Seen: only items that are still active
+        query += " AND (resolved = 0 OR resolved IS NULL)"
+        if status in ("lost", "found", "seen"):
+            query += " AND status = ?"
+            params.append(status)
 
     query += " ORDER BY date_reported DESC"
 
@@ -71,7 +78,6 @@ def home():
     }
     conn.close()
     return render_template("index.html", items=items, q=q, status=status, stats=stats)
-
 @app.route("/report", methods=["GET", "POST"])
 def report():
     if "user_id" not in session:
