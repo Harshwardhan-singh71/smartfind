@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Activity log - SmartFind{% endblock %}
+{% block content %}
+    <h1 class="page-title">Activity log</h1>
+
+    <form method="GET" style="display: flex; gap: 8px; margin: 12px 0;">
+        <input type="hidden" name="action" value="{{ action }}">
+        <input type="text" name="q" value="{{ q }}" placeholder="Search by item or person..." style="flex: 1;">
+        <button type="submit">Search</button>
+    </form>
+
+    {% set tabs = [
+        ('', 'All'),
+        ('item_posted', 'Posted'),
+        ('claim_created', 'Claims sent'),
+        ('claim_accepted', 'Accepted'),
+        ('claim_rejected', 'Rejected'),
+        ('item_resolved', 'Returned'),
+        ('item_deleted', 'Deleted')
+    ] %}
+    <div class="tabs">
+        {% for value, label in tabs %}
+            <a class="tab {% if action == value %}active{% endif %}"
+               href="/admin/activity?action={{ value }}&q={{ q|urlencode }}">{{ label }}</a>
+        {% endfor %}
+    </div>
+
+    <div class="log-list">
+        {% for r in rows %}
+            {% set kind = r.action.replace('claim_', '').replace('item_', '') %}
+            <div class="log-item {{ kind }}">
+                <div class="log-top">
+                    <span class="log-pill {{ kind }}">
+                        {% if kind == 'posted' %}POSTED
+                        {% elif kind == 'created' %}CLAIM SENT
+                        {% elif kind == 'accepted' %}ACCEPTED
+                        {% elif kind == 'rejected' %}REJECTED
+                        {% elif kind == 'resolved' %}RETURNED
+                        {% else %}DELETED{% endif %}
+                    </span>
+                    <span class="meta">{{ r.created_at }}</span>
+                </div>
+                <p class="log-text">
+                    {% if kind == 'posted' %}
+                        <b>{{ r.actor_name or 'Someone' }}</b> posted a {{ (r.item_status or '')|upper }} item
+                    {% elif kind == 'created' %}
+                        <b>{{ r.claimant_name or 'Someone' }}</b> claimed
+                    {% elif kind == 'accepted' %}
+                        <b>{{ r.actor_name or 'The finder' }}</b> accepted <b>{{ r.claimant_name or 'a' }}</b>'s claim on
+                    {% elif kind == 'rejected' %}
+                        <b>{{ r.actor_name or 'The finder' }}</b> rejected <b>{{ r.claimant_name or 'a' }}</b>'s claim on
+                    {% elif kind == 'resolved' %}
+                        <b>{{ r.actor_name or 'Someone' }}</b> marked as returned:
+                    {% else %}
+                        <b>{{ r.actor_name or 'Admin' }}</b> deleted
+                    {% endif %}
+                    {% if kind != 'deleted' and r.item_status %}
+                        <a href="/item/{{ r.item_id }}"><b>{{ r.item_title }}</b></a>
+                    {% else %}
+                        <b>{{ r.item_title or ('item #' ~ r.item_id) }}</b>
+                    {% endif %}
+                </p>
+                {% if kind == 'created' and r.answer %}
+                    <div class="log-answer">“{{ r.answer|truncate(120) }}”</div>
+                {% endif %}
+            </div>
+        {% else %}
+            <p class="empty">Nothing logged yet.</p>
+        {% endfor %}
+    </div>
+
+    <div class="log-pager">
+        {% if page > 1 %}
+            <a class="btn btn-outline" href="/admin/activity?action={{ action }}&q={{ q|urlencode }}&page={{ page - 1 }}">← Newer</a>
+        {% else %}<span></span>{% endif %}
+        {% if has_next %}
+            <a class="btn btn-outline" href="/admin/activity?action={{ action }}&q={{ q|urlencode }}&page={{ page + 1 }}">Older →</a>
+        {% endif %}
+    </div>
+{% endblock %}

@@ -78,24 +78,27 @@ def home():
     }
     conn.close()
     return render_template("index.html", items=items, q=q, status=status, stats=stats)
+def log_event(conn, item_id, action, user_id=None, claim_id=None, detail=None):
+    conn.execute(
+        "INSERT INTO events (item_id, claim_id, user_id, action, detail) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (item_id, claim_id, user_id, action, detail),
+    )
 @app.route("/report", methods=["GET", "POST"])
 def report():
     if "user_id" not in session:
         flash("Please log in to report an item.")
         return redirect(url_for("login"))
-
     if request.method == "POST":
         status = request.form["status"]
         if status not in ("lost", "found", "seen"):
             flash("Invalid post type.")
             return redirect(url_for("report"))
-
         photo = request.files.get("photo")
         image_name = save_image(photo)
         if photo and photo.filename and image_name is None:
             flash("Photo must be a PNG, JPG or WEBP file.")
             return redirect(url_for("report"))
-
         place = request.form["place"].strip()
         details = request.form.get("place_details", "").strip()
         location = f"{place}, {details}" if details else place
@@ -108,7 +111,7 @@ def report():
             at_security = 1 if request.form.get("at_security") else 0
 
         conn = get_db()
-        conn.execute(
+        cur = conn.execute(
             "INSERT INTO items (title, description, category, location, status, "
             "contact_name, contact_email, user_id, place, place_details, "
             "event_date, event_time, image, private_question, at_security) "
@@ -131,6 +134,8 @@ def report():
                 at_security,
             ),
         )
+        log_event(conn, cur.lastrowid, "item_posted", session["user_id"],
+                  detail=request.form["title"])
         conn.commit()
         conn.close()
         return redirect(url_for("home"))
@@ -201,19 +206,28 @@ def logout():
 def resolve(item_id):
     conn = get_db()
     if is_admin_user():
-        conn.execute("UPDATE items SET resolved = 1 WHERE id = ?", (item_id,))
+        cur = conn.execute(
+            "UPDATE items SET resolved = 1 "
+            "WHERE id = ? AND (resolved = 0 OR resolved IS NULL)",
+            (item_id,),
+        )
     else:
-        conn.execute(
-            "UPDATE items SET resolved = 1 WHERE id = ? AND user_id = ?",
+        cur = conn.execute(
+            "UPDATE items SET resolved = 1 "
+            "WHERE id = ? AND user_id = ? AND (resolved = 0 OR resolved IS NULL)",
             (item_id, session["user_id"]),
         )
+    if cur.rowcount > 0:
+        title = conn.execute(
+            "SELECT title FROM items WHERE id = ?", (item_id,)
+        ).fetchone()["title"]
+        log_event(conn, item_id, "item_resolved", session["user_id"], detail=title)
     conn.commit()
     conn.close()
 
     if request.args.get("back") == "my":
         return redirect(url_for("my_posts"))
     return redirect(url_for("item_detail", item_id=item_id))
-
 @app.route("/matches/<int:item_id>")
 def matches(item_id):
     conn = get_db()
@@ -278,7 +292,11 @@ def delete_item(item_id):
         return redirect(url_for("home"))
 
     conn = get_db()
-    row = conn.execute("SELECT image FROM items WHERE id = ?", (item_id,)).fetchone()
+    row = conn.execute(
+        "SELECT image, title FROM items WHERE id = ?", (item_id,)
+    ).fetchone()
+    if row:
+        log_event(conn, item_id, "item_deleted", session["user_id"], detail=row["title"])
     conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
     conn.commit()
     conn.close()
@@ -632,6 +650,56 @@ def activity():
     return render_template(
         "activity.html", rows=rows, view=view, q=q, status=status,
         filters=filters, pending_received=pending_received,
+    )
+@app.route("/admin/activity")
+def admin_activity():
+    if not is_admin_user():
+        abort(403)
+
+    allowed = ("item_posted", "claim_created", "claim_accepted",
+               "claim_rejected", "item_resolved", "item_deleted")
+    q = request.args.get("q", "").strip()
+    action = request.args.get("action", "")
+    if action not in allowed:
+        action = ""
+    page = request.args.get("page", 1, type=int)
+    if page < 1:
+        page = 1
+    per_page = 24
+    like = f"%{q}%"
+
+    query = (
+        "SELECT events.id, events.action, events.created_at, events.item_id, "
+        "COALESCE(items.title, events.detail) AS item_title, "
+        "items.status AS item_status, "
+        "actor.name AS actor_name, claimant.name AS claimant_name, "
+        "claims.answer AS answer "
+        "FROM events "
+        "LEFT JOIN items ON items.id = events.item_id "
+        "LEFT JOIN users AS actor ON actor.id = events.user_id "
+        "LEFT JOIN claims ON claims.id = events.claim_id "
+        "LEFT JOIN users AS claimant ON claimant.id = claims.claimant_id "
+        "WHERE 1=1"
+    )
+    params = []
+    if q:
+        query += (" AND (COALESCE(items.title, events.detail) LIKE ? "
+                  "OR actor.name LIKE ? OR claimant.name LIKE ?)")
+        params += [like, like, like]
+    if action:
+        query += " AND events.action = ?"
+        params.append(action)
+    query += " ORDER BY events.id DESC LIMIT ? OFFSET ?"
+    params += [per_page + 1, (page - 1) * per_page]
+
+    conn = get_db()
+    rows = conn.execute(query, params).fetchall()
+    conn.close()
+    has_next = len(rows) > per_page
+    rows = rows[:per_page]
+    return render_template(
+        "admin_activity.html", rows=rows, q=q, action=action,
+        page=page, has_next=has_next,
     )
 if __name__ == "__main__":
     app.run(debug=True)

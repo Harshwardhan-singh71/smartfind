@@ -424,3 +424,63 @@ footer {
 .plain-table { width: 100%; border-collapse: collapse; }
 .plain-table th, .plain-table td { text-align: left; padding: 8px; border-bottom: 1px solid var(--border); }
 code { background: #fff; border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; }
+
+/* ---------- Admin activity log ---------- */
+.log-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+}
+.log-item {
+    background: #fff;
+    border-radius: 12px;
+    padding: 10px 14px;
+    border-left: 5px solid #1d2b64;
+    box-shadow: 0 1px 6px rgba(29, 43, 100, 0.08);
+}
+.log-item.posted   { border-left-color: #1d2b64; }
+.log-item.created  { border-left-color: #ff7a45; }
+.log-item.accepted { border-left-color: #2e9e5b; }
+.log-item.rejected { border-left-color: #d64545; }
+.log-item.resolved { border-left-color: #8a4fd6; }
+.log-item.deleted  { border-left-color: #6b7280; }
+.log-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+    font-size: 13px;
+}
+.log-pill {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 999px;
+    color: #fff;
+}
+.log-pill.posted   { background: #1d2b64; }
+.log-pill.created  { background: #ff7a45; }
+.log-pill.accepted { background: #2e9e5b; }
+.log-pill.rejected { background: #d64545; }
+.log-pill.resolved { background: #8a4fd6; }
+.log-pill.deleted  { background: #6b7280; }
+.log-text {
+    margin: 2px 0;
+    font-size: 14.5px;
+    line-height: 1.35;
+}
+.log-answer {
+    margin-top: 4px;
+    padding: 5px 10px;
+    background: #f4f6fb;
+    border-radius: 8px;
+    font-size: 13px;
+    color: #444;
+}
+.log-pager {
+    display: flex;
+    justify-content: space-between;
+    margin: 16px 0;
+}
