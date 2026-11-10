@@ -10,3 +10,13 @@ admin.txt
 matcher_backup.txt
 *.zip
 allowed_emails.txt
+.agent/
+.agents/
+.gemini/
+.gsd/
+GSD-STYLE.md
+PROJECT_RULES.md
+VERSION
+adapters/
+model_capabilities.yaml
+scripts/
