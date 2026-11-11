@@ -60,7 +60,7 @@
                     <p class="meta">✅ You have claimed this item. Waiting for the finder to review it.</p>
                 {% elif my_claim.status == 'accepted' %}
                     <p><b>🎉 Your claim was accepted!</b></p>
-                    <p class="meta">Chat with the finder is coming in a later step.</p>
+                    <a class="btn" href="/chat/{{ my_claim.id }}">Open chat with the finder</a>
                 {% else %}
                     <p class="meta">Your claim was not accepted.</p>
                 {% endif %}
@@ -73,7 +73,8 @@
         {% endif %}
     </div>
     {% endif %}
-        {% if has_alert and not my_claim and not item.resolved %}
+
+    {% if has_alert and not my_claim and not item.resolved %}
     <div class="card">
         <p class="meta">We suggested this item as a possible match for something you lost. Not yours?</p>
         <form method="POST" action="/match/{{ item.id }}/not-mine">
@@ -81,6 +82,7 @@
         </form>
     </div>
     {% endif %}
+
     {% if is_owner and item.status == 'found' %}
     <div class="card">
         <h3>Claims on this item</h3>
@@ -102,6 +104,8 @@
                             <input type="hidden" name="action" value="reject">
                             <button type="submit" class="btn-danger">Reject</button>
                         </form>
+                    {% elif c.status == 'accepted' %}
+                        <a class="btn" href="/chat/{{ c.id }}">Open chat</a>
                     {% endif %}
                 </div>
             {% endfor %}

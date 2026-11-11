@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Chat - SmartFind{% endblock %}
+{% block content %}
+    <p><a href="/item/{{ item.id }}">← Back to item</a></p>
+
+    <div class="card chat-card">
+        <h1 class="page-title">Chat</h1>
+        <p class="subtitle">
+            About: <b>{{ item.title }}</b><br>
+            You are chatting with the {% if role == 'finder' %}person who claimed it{% else %}finder{% endif %}.
+        </p>
+        <p class="chat-safety">
+            🔒 Phone numbers are not shared here. Meet in a public place on campus, or at the
+            security desk. Never share OTPs or passwords. SmartFind never asks for money.
+        </p>
+
+        <div class="chat-box" id="chat-box" data-last="{{ messages[-1].id if messages else 0 }}">
+            {% for m in messages %}
+                <div class="msg {% if m.sender_id == me %}mine{% else %}theirs{% endif %}">
+                    <div class="msg-body">{{ m.body }}</div>
+                    <div class="msg-time">{{ m.created_at }}</div>
+                </div>
+            {% else %}
+                <p class="empty" id="chat-empty">No messages yet. Say hello and agree on a place to meet.</p>
+            {% endfor %}
+        </div>
+
+        {% if closed %}
+            <p class="meta">✔ This item was returned, so the chat is now read-only.</p>
+        {% else %}
+            <form method="POST" action="/chat/{{ claim.id }}/send" class="chat-form">
+                <textarea name="body" rows="2" maxlength="1000" required
+                          placeholder="Type a message..."></textarea>
+                <button type="submit">Send</button>
+            </form>
+        {% endif %}
+    </div>
+
+    <script>
+        (function () {
+            var box = document.getElementById("chat-box");
+            var last = parseInt(box.getAttribute("data-last"), 10) || 0;
+            box.scrollTop = box.scrollHeight;
+
+            function add(m) {
+                var empty = document.getElementById("chat-empty");
+                if (empty) empty.remove();
+                var wrap = document.createElement("div");
+                wrap.className = "msg " + (m.mine ? "mine" : "theirs");
+                var body = document.createElement("div");
+                body.className = "msg-body";
+                body.textContent = m.body;
+                var time = document.createElement("div");
+                time.className = "msg-time";
+                time.textContent = m.time;
+                wrap.appendChild(body);
+                wrap.appendChild(time);
+                box.appendChild(wrap);
+                last = m.id;
+            }
+
+            function poll() {
+                fetch("/chat/{{ claim.id }}/new?after=" + last, {credentials: "same-origin"})
+                    .then(function (r) { return r.ok ? r.json() : []; })
+                    .then(function (rows) {
+                        if (rows.length) {
+                            rows.forEach(add);
+                            box.scrollTop = box.scrollHeight;
+                        }
+                    })
+                    .catch(function () {});
+            }
+            setInterval(poll, 4000);
+        })();
+    </script>
+{% endblock %}

@@ -600,3 +600,30 @@ button.bell-link {
     padding: 10px;
     display: block;
 }
+/* ---------- Chat ---------- */
+.chat-safety {
+    background: #fff8f4;
+    border-left: 4px solid #ff7a45;
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin: 10px 0;
+}
+.chat-box {
+    height: 340px;
+    overflow-y: auto;
+    background: #f4f6fb;
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin: 10px 0;
+}
+.msg { max-width: 75%; padding: 8px 12px; border-radius: 14px; }
+.msg.mine { align-self: flex-end; background: #1d2b64; color: #fff; }
+.msg.theirs { align-self: flex-start; background: #fff; color: #222; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); }
+.msg-body { white-space: pre-wrap; word-wrap: break-word; font-size: 15px; }
+.msg-time { font-size: 11px; opacity: 0.7; margin-top: 3px; }
+.chat-form { display: flex; gap: 8px; align-items: flex-end; }
+.chat-form textarea { flex: 1; }

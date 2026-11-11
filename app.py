@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import date, timedelta
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
@@ -446,7 +446,7 @@ def item_detail(item_id):
             ).fetchall()
         elif "user_id" in session:
             my_claim = conn.execute(
-                "SELECT status FROM claims WHERE item_id = ? AND claimant_id = ?",
+                "SELECT id, status FROM claims WHERE item_id = ? AND claimant_id = ?",
                 (item_id, session["user_id"]),
             ).fetchone()
     if "user_id" in session and not is_owner:
@@ -746,6 +746,105 @@ def match_not_mine(found_id):
     conn.close()
     flash("Okay, we won't suggest this item for your lost item again.")
     return redirect(url_for("home"))
+
+
+def chat_context(conn, claim_id):
+    """Return (claim, item, role) if the signed-in user may use this chat, else abort."""
+    claim = conn.execute("SELECT * FROM claims WHERE id = ?", (claim_id,)).fetchone()
+    if claim is None:
+        conn.close()
+        abort(404)
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (claim["item_id"],)).fetchone()
+    if item is None or claim["status"] != "accepted":
+        conn.close()
+        abort(403)
+    uid = session["user_id"]
+    if uid == item["user_id"]:
+        role = "finder"
+    elif uid == claim["claimant_id"]:
+        role = "claimant"
+    else:
+        conn.close()
+        abort(403)
+    return claim, item, role
+
+
+@app.route("/chat/<int:claim_id>")
+def chat(claim_id):
+    conn = get_db()
+    claim, item, role = chat_context(conn, claim_id)
+    messages = conn.execute(
+        "SELECT * FROM messages WHERE claim_id = ? ORDER BY id", (claim_id,)
+    ).fetchall()
+    conn.execute(
+        "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND link = ?",
+        (session["user_id"], url_for("chat", claim_id=claim_id)),
+    )
+    conn.commit()
+    conn.close()
+    return render_template(
+        "chat.html", claim=claim, item=item, role=role, messages=messages,
+        me=session["user_id"], closed=bool(item["resolved"]),
+    )
+
+
+@app.route("/chat/<int:claim_id>/send", methods=["POST"])
+def chat_send(claim_id):
+    conn = get_db()
+    claim, item, role = chat_context(conn, claim_id)
+    if item["resolved"]:
+        conn.close()
+        flash("This item was returned, so the chat is now read-only.")
+        return redirect(url_for("chat", claim_id=claim_id))
+
+    body = request.form.get("body", "").strip()
+    if not body:
+        conn.close()
+        flash("Please type a message.")
+        return redirect(url_for("chat", claim_id=claim_id))
+    if len(body) > 1000:
+        conn.close()
+        flash("Messages can be at most 1000 characters.")
+        return redirect(url_for("chat", claim_id=claim_id))
+
+    conn.execute(
+        "INSERT INTO messages (claim_id, sender_id, body) VALUES (?, ?, ?)",
+        (claim_id, session["user_id"], body),
+    )
+    other_id = claim["claimant_id"] if role == "finder" else item["user_id"]
+    link = url_for("chat", claim_id=claim_id)
+    unread = conn.execute(
+        "SELECT 1 FROM notifications WHERE user_id = ? AND link = ? AND is_read = 0",
+        (other_id, link),
+    ).fetchone()
+    if not unread:
+        notify(conn, other_id, f'New message about "{item["title"]}".', link)
+    conn.commit()
+    conn.close()
+    return redirect(url_for("chat", claim_id=claim_id))
+
+
+@app.route("/chat/<int:claim_id>/new")
+def chat_new(claim_id):
+    after = request.args.get("after", 0, type=int)
+    conn = get_db()
+    chat_context(conn, claim_id)
+    rows = conn.execute(
+        "SELECT id, sender_id, body, created_at FROM messages "
+        "WHERE claim_id = ? AND id > ? ORDER BY id",
+        (claim_id, after),
+    ).fetchall()
+    conn.execute(
+        "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND link = ?",
+        (session["user_id"], url_for("chat", claim_id=claim_id)),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify([
+        {"id": r["id"], "mine": r["sender_id"] == session["user_id"],
+         "body": r["body"], "time": r["created_at"]}
+        for r in rows
+    ])
 
 
 @app.route("/activity")
