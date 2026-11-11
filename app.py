@@ -3,6 +3,7 @@ import sqlite3
 import secrets
 import time
 import uuid
+from datetime import date, timedelta
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, abort
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -16,7 +17,7 @@ app.secret_key = "change-this-to-any-long-random-text-123"
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
 
 def save_image(file):
@@ -35,6 +36,7 @@ def save_image(file):
 def too_large(error):
     flash("Photo is too large. Maximum size is 20 MB.")
     return redirect(url_for("report"))
+
 
 def get_db():
     conn = sqlite3.connect("smartfind.db")
@@ -78,12 +80,108 @@ def home():
     }
     conn.close()
     return render_template("index.html", items=items, q=q, status=status, stats=stats)
+
+
 def log_event(conn, item_id, action, user_id=None, claim_id=None, detail=None):
     conn.execute(
         "INSERT INTO events (item_id, claim_id, user_id, action, detail) "
         "VALUES (?, ?, ?, ?, ?)",
         (item_id, claim_id, user_id, action, detail),
     )
+
+
+def parse_day(text):
+    try:
+        return date.fromisoformat((text or "").strip())
+    except ValueError:
+        return None
+
+
+def dates_plausible(lost_item, found_item):
+    """A found date earlier than the lost date (with 1 day slack) is impossible."""
+    lost_day = parse_day(lost_item["event_date"])
+    found_day = parse_day(found_item["event_date"])
+    if lost_day and found_day and found_day < lost_day - timedelta(days=1):
+        return False
+    return True
+
+
+MATCH_ALERT_MIN = 40   # only alert for matches of at least this percent
+MATCH_ALERT_MAX = 3    # at most this many alerts per new post
+
+
+def notify_matches(conn, item_id):
+    """After a new post, alert the people who may want to know about it."""
+    item = conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        return
+
+    wanted = ("found", "seen") if item["status"] == "lost" else ("lost",)
+    placeholders = ",".join("?" * len(wanted))
+    candidates = conn.execute(
+        f"SELECT * FROM items WHERE status IN ({placeholders}) "
+        "AND (resolved = 0 OR resolved IS NULL) AND user_id != ?",
+        (*wanted, item["user_id"]),
+    ).fetchall()
+
+    results = find_matches(item, candidates, top_n=10, min_score=MATCH_ALERT_MIN / 100)
+
+    good = []
+    for other, percent in results:
+        if item["status"] == "lost":
+            lost_item, found_item = item, other
+        else:
+            lost_item, found_item = other, item
+
+        # Rule 1: same category, unless the text match is very strong
+        same_category = (item["category"] or "").strip().lower() == \
+                        (other["category"] or "").strip().lower()
+        if not (same_category or percent >= 70):
+            continue
+        # Rule 2: dates must make sense
+        if not dates_plausible(lost_item, found_item):
+            continue
+        # Rule 3: never alert the same pair twice
+        already = conn.execute(
+            "SELECT 1 FROM match_alerts WHERE lost_item_id = ? AND found_item_id = ?",
+            (lost_item["id"], found_item["id"]),
+        ).fetchone()
+        if already:
+            continue
+
+        good.append((other, percent, lost_item, found_item))
+        if len(good) == MATCH_ALERT_MAX:
+            break
+
+    if not good:
+        return
+
+    for other, percent, lost_item, found_item in good:
+        conn.execute(
+            "INSERT OR IGNORE INTO match_alerts (user_id, lost_item_id, found_item_id) "
+            "VALUES (?, ?, ?)",
+            (lost_item["user_id"], lost_item["id"], found_item["id"]),
+        )
+
+    if item["status"] == "lost":
+        count = len(good)
+        plural = "es" if count != 1 else ""
+        notify(
+            conn, item["user_id"],
+            f'We found {count} possible match{plural} for your lost "{item["title"]}".',
+            url_for("matches", item_id=item["id"]),
+        )
+    else:
+        verb = "found" if item["status"] == "found" else "saw"
+        for other, percent, lost_item, found_item in good:
+            notify(
+                conn, lost_item["user_id"],
+                f'Possible match ({percent}%) for your lost "{lost_item["title"]}": '
+                f'someone {verb} "{item["title"]}". Is this yours?',
+                url_for("item_detail", item_id=item["id"]),
+            )
+
+
 @app.route("/report", methods=["GET", "POST"])
 def report():
     if "user_id" not in session:
@@ -136,10 +234,12 @@ def report():
         )
         log_event(conn, cur.lastrowid, "item_posted", session["user_id"],
                   detail=request.form["title"])
+        notify_matches(conn, cur.lastrowid)
         conn.commit()
         conn.close()
         return redirect(url_for("home"))
     return render_template("report.html")
+
 
 @app.route("/register")
 def register():
@@ -147,9 +247,12 @@ def register():
           "temporary password you were sent.")
     return redirect(url_for("login"))
 
+
 FAILED_LOGINS = {}  # "ip|email" -> [failed count, locked until time]
 MAX_ATTEMPTS = 5
 LOCK_SECONDS = 600
+
+
 def is_locked(key):
     entry = FAILED_LOGINS.get(key)
     return bool(entry) and entry[1] > time.time()
@@ -161,6 +264,8 @@ def record_failure(key):
     if entry[0] >= MAX_ATTEMPTS:
         entry[1] = time.time() + LOCK_SECONDS
         entry[0] = 0
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -202,6 +307,7 @@ def logout():
     session.clear()
     return redirect(url_for("home"))
 
+
 @app.route("/resolve/<int:item_id>", methods=["POST"])
 def resolve(item_id):
     conn = get_db()
@@ -228,6 +334,8 @@ def resolve(item_id):
     if request.args.get("back") == "my":
         return redirect(url_for("my_posts"))
     return redirect(url_for("item_detail", item_id=item_id))
+
+
 @app.route("/matches/<int:item_id>")
 def matches(item_id):
     conn = get_db()
@@ -253,6 +361,8 @@ def matches(item_id):
 
     results = find_matches(item, candidates)
     return render_template("matches.html", item=item, results=results)
+
+
 @app.route("/my-posts")
 def my_posts():
     if "user_id" not in session:
@@ -266,6 +376,8 @@ def my_posts():
     ).fetchall()
     conn.close()
     return render_template("my_posts.html", items=items)
+
+
 def load_admin_email():
     """Read the admin email from admin.txt (kept out of Git). No file = no admin."""
     try:
@@ -309,6 +421,8 @@ def delete_item(item_id):
 
     flash("Post deleted.")
     return redirect(url_for("home"))
+
+
 @app.route("/item/<int:item_id>")
 def item_detail(item_id):
     conn = get_db()
@@ -320,6 +434,7 @@ def item_detail(item_id):
     is_owner = "user_id" in session and session["user_id"] == item["user_id"]
     claims = []
     my_claim = None
+    has_alert = False
     if item["status"] == "found":
         if is_owner:
             claims = conn.execute(
@@ -334,11 +449,22 @@ def item_detail(item_id):
                 "SELECT status FROM claims WHERE item_id = ? AND claimant_id = ?",
                 (item_id, session["user_id"]),
             ).fetchone()
+    if "user_id" in session and not is_owner:
+        has_alert = conn.execute(
+            "SELECT 1 FROM match_alerts "
+            "WHERE found_item_id = ? AND user_id = ? AND dismissed = 0",
+            (item_id, session["user_id"]),
+        ).fetchone() is not None
     conn.close()
     return render_template(
-        "item.html", item=item, is_owner=is_owner, claims=claims, my_claim=my_claim
+        "item.html", item=item, is_owner=is_owner, claims=claims,
+        my_claim=my_claim, has_alert=has_alert,
     )
+
+
 PUBLIC_ENDPOINTS = {"login", "register", "static"}
+
+
 @app.before_request
 def require_login():
     """Everything except login, register and the stylesheet needs a signed-in user."""
@@ -350,12 +476,20 @@ def require_login():
     if session.get("must_change") and request.endpoint not in ("change_password", "logout"):
         return redirect(url_for("change_password"))
     return None
+
+
 @app.errorhandler(403)
 def no_access(error):
     return render_template("no_access.html"), 403
+
+
 PASSWORD_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+
 def temp_password():
     return "".join(secrets.choice(PASSWORD_CHARS) for _ in range(8))
+
+
 @app.route("/admin/users", methods=["GET", "POST"])
 def admin_users():
     if not is_admin_user():
@@ -414,6 +548,8 @@ def admin_users():
     ).fetchall()
     conn.close()
     return render_template("admin_users.html", users=users, created=created, skipped=skipped)
+
+
 @app.route("/change-password", methods=["GET", "POST"])
 def change_password():
     if request.method == "POST":
@@ -449,6 +585,8 @@ def change_password():
         flash("Password updated.")
         return redirect(url_for("home"))
     return render_template("change_password.html")
+
+
 @app.route("/claim/<int:item_id>", methods=["GET", "POST"])
 def claim(item_id):
     conn = get_db()
@@ -510,6 +648,8 @@ def claim(item_id):
 
     conn.close()
     return render_template("claim.html", item=item)
+
+
 @app.route("/claim/<int:claim_id>/decide", methods=["POST"])
 def decide_claim(claim_id):
     action = request.form.get("action")
@@ -593,6 +733,21 @@ def decide_claim(claim_id):
     conn.commit()
     conn.close()
     return redirect(link)
+
+
+@app.route("/match/<int:found_id>/not-mine", methods=["POST"])
+def match_not_mine(found_id):
+    conn = get_db()
+    conn.execute(
+        "UPDATE match_alerts SET dismissed = 1 WHERE found_item_id = ? AND user_id = ?",
+        (found_id, session["user_id"]),
+    )
+    conn.commit()
+    conn.close()
+    flash("Okay, we won't suggest this item for your lost item again.")
+    return redirect(url_for("home"))
+
+
 @app.route("/activity")
 def activity():
     uid = session["user_id"]
@@ -679,6 +834,8 @@ def activity():
         "activity.html", rows=rows, view=view, q=q, status=status,
         filters=filters, pending_received=pending_received,
     )
+
+
 @app.route("/admin/activity")
 def admin_activity():
     if not is_admin_user():
@@ -729,6 +886,8 @@ def admin_activity():
         "admin_activity.html", rows=rows, q=q, action=action,
         page=page, has_next=has_next,
     )
+
+
 def notify(conn, user_id, message, link=None):
     conn.execute(
         "INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
@@ -791,6 +950,8 @@ def notifications_read_all():
     )
     conn.commit()
     conn.close()
-    return redirect(url_for("notifications"))
+    return redirect(request.referrer or url_for("notifications"))
+
+
 if __name__ == "__main__":
     app.run(debug=True)

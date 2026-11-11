@@ -73,7 +73,14 @@
         {% endif %}
     </div>
     {% endif %}
-
+        {% if has_alert and not my_claim and not item.resolved %}
+    <div class="card">
+        <p class="meta">We suggested this item as a possible match for something you lost. Not yours?</p>
+        <form method="POST" action="/match/{{ item.id }}/not-mine">
+            <button type="submit" class="btn-outline">Not mine</button>
+        </form>
+    </div>
+    {% endif %}
     {% if is_owner and item.status == 'found' %}
     <div class="card">
         <h3>Claims on this item</h3>
