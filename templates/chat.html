@@ -17,7 +17,17 @@
         <div class="chat-box" id="chat-box" data-last="{{ messages[-1].id if messages else 0 }}">
             {% for m in messages %}
                 <div class="msg {% if m.sender_id == me %}mine{% else %}theirs{% endif %}">
-                    <div class="msg-body">{{ m.body }}</div>
+                    {% if m.file_name %}
+                        {% set ext = m.file_name.rsplit('.', 1)[-1] %}
+                        {% if ext in ['png', 'jpg', 'jpeg', 'webp'] %}
+                            <a href="/chat/{{ claim.id }}/file/{{ m.file_name }}" target="_blank">
+                                <img class="msg-img" src="/chat/{{ claim.id }}/file/{{ m.file_name }}" alt="Shared photo">
+                            </a>
+                        {% else %}
+                            <a class="msg-file" href="/chat/{{ claim.id }}/file/{{ m.file_name }}">📄 Download file (.{{ ext }})</a>
+                        {% endif %}
+                    {% endif %}
+                    {% if m.body %}<div class="msg-body">{{ m.body }}</div>{% endif %}
                     <div class="msg-time">{{ m.created_at }}</div>
                 </div>
             {% else %}
@@ -28,11 +38,16 @@
         {% if closed %}
             <p class="meta">✔ This item was returned, so the chat is now read-only.</p>
         {% else %}
-            <form method="POST" action="/chat/{{ claim.id }}/send" class="chat-form">
-                <textarea name="body" rows="2" maxlength="1000" required
+            <form method="POST" action="/chat/{{ claim.id }}/send" enctype="multipart/form-data" class="chat-form">
+                <textarea name="body" rows="2" maxlength="1000"
                           placeholder="Type a message..."></textarea>
                 <button type="submit">Send</button>
+                <label class="attach">
+                    📎 Attach a photo or file
+                    <input type="file" name="file">
+                </label>
             </form>
+            <p class="meta">Photos and files up to 10 MB (programs and scripts are not allowed). Cover ID numbers and personal details before sharing.</p>
         {% endif %}
     </div>
 
@@ -47,13 +62,31 @@
                 if (empty) empty.remove();
                 var wrap = document.createElement("div");
                 wrap.className = "msg " + (m.mine ? "mine" : "theirs");
-                var body = document.createElement("div");
-                body.className = "msg-body";
-                body.textContent = m.body;
+                if (m.file_url) {
+                    var link = document.createElement("a");
+                    link.href = m.file_url;
+                    if (m.is_image) {
+                        link.target = "_blank";
+                        var img = document.createElement("img");
+                        img.className = "msg-img";
+                        img.src = m.file_url;
+                        img.alt = "Shared photo";
+                        link.appendChild(img);
+                    } else {
+                        link.className = "msg-file";
+                        link.textContent = "📄 Download file (." + m.ext + ")";
+                    }
+                    wrap.appendChild(link);
+                }
+                if (m.body) {
+                    var body = document.createElement("div");
+                    body.className = "msg-body";
+                    body.textContent = m.body;
+                    wrap.appendChild(body);
+                }
                 var time = document.createElement("div");
                 time.className = "msg-time";
                 time.textContent = m.time;
-                wrap.appendChild(body);
                 wrap.appendChild(time);
                 box.appendChild(wrap);
                 last = m.id;

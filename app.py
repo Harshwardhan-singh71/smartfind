@@ -5,7 +5,7 @@ import time
 import uuid
 from datetime import date, timedelta
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify
+from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
@@ -32,10 +32,39 @@ def save_image(file):
     return filename
 
 
+CHAT_UPLOAD_FOLDER = os.path.join(app.root_path, "chat_uploads")   # private, not in /static
+CHAT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}   # shown inside the chat
+# Any file type may be shared EXCEPT programs and scripts, which could carry malware.
+CHAT_BLOCKED_EXTENSIONS = {
+    "exe", "msi", "bat", "cmd", "com", "scr", "pif", "vbs", "vbe", "js", "jse",
+    "ps1", "psm1", "sh", "jar", "apk", "dll", "reg", "lnk", "hta", "cpl", "msc",
+    "wsf", "wsh", "appx", "dmg", "html", "htm", "xhtml", "svg",
+}
+CHAT_MAX_BYTES = 10 * 1024 * 1024
+os.makedirs(CHAT_UPLOAD_FOLDER, exist_ok=True)
+
+
+def save_chat_file(file):
+    """Save a chat attachment. Returns (stored_name, error_message)."""
+    safe = secure_filename(file.filename)
+    extension = safe.rsplit(".", 1)[-1].lower() if "." in safe else "bin"
+    extension = "".join(ch for ch in extension if ch.isalnum())[:10] or "bin"
+    if extension in CHAT_BLOCKED_EXTENSIONS:
+        return None, "For safety, programs and scripts (like .exe or .html) can't be shared."
+    file.seek(0, os.SEEK_END)
+    size = file.tell()
+    file.seek(0)
+    if size > CHAT_MAX_BYTES:
+        return None, "Files can be at most 10 MB."
+    stored = f"{uuid.uuid4().hex}.{extension}"
+    file.save(os.path.join(CHAT_UPLOAD_FOLDER, stored))
+    return stored, None
+
+
 @app.errorhandler(413)
 def too_large(error):
-    flash("Photo is too large. Maximum size is 20 MB.")
-    return redirect(url_for("report"))
+    flash("That file is too large.")
+    return redirect(request.referrer or url_for("report"))
 
 
 def get_db():
@@ -792,36 +821,67 @@ def chat(claim_id):
 def chat_send(claim_id):
     conn = get_db()
     claim, item, role = chat_context(conn, claim_id)
+    back = url_for("chat", claim_id=claim_id)
     if item["resolved"]:
         conn.close()
         flash("This item was returned, so the chat is now read-only.")
-        return redirect(url_for("chat", claim_id=claim_id))
+        return redirect(back)
 
     body = request.form.get("body", "").strip()
-    if not body:
+    upload = request.files.get("file")
+    has_file = bool(upload and upload.filename)
+
+    if not body and not has_file:
         conn.close()
-        flash("Please type a message.")
-        return redirect(url_for("chat", claim_id=claim_id))
+        flash("Please type a message or attach a file.")
+        return redirect(back)
     if len(body) > 1000:
         conn.close()
         flash("Messages can be at most 1000 characters.")
-        return redirect(url_for("chat", claim_id=claim_id))
+        return redirect(back)
+
+    stored_name = None
+    if has_file:
+        stored_name, error = save_chat_file(upload)
+        if error:
+            conn.close()
+            flash(error)
+            return redirect(back)
 
     conn.execute(
-        "INSERT INTO messages (claim_id, sender_id, body) VALUES (?, ?, ?)",
-        (claim_id, session["user_id"], body),
+        "INSERT INTO messages (claim_id, sender_id, body, file_name) VALUES (?, ?, ?, ?)",
+        (claim_id, session["user_id"], body or None, stored_name),
     )
     other_id = claim["claimant_id"] if role == "finder" else item["user_id"]
-    link = url_for("chat", claim_id=claim_id)
     unread = conn.execute(
         "SELECT 1 FROM notifications WHERE user_id = ? AND link = ? AND is_read = 0",
-        (other_id, link),
+        (other_id, back),
     ).fetchone()
     if not unread:
-        notify(conn, other_id, f'New message about "{item["title"]}".', link)
+        notify(conn, other_id, f'New message about "{item["title"]}".', back)
     conn.commit()
     conn.close()
-    return redirect(url_for("chat", claim_id=claim_id))
+    return redirect(back)
+
+
+@app.route("/chat/<int:claim_id>/file/<name>")
+def chat_file(claim_id, name):
+    """Serve a chat attachment, only to the two people in this chat."""
+    conn = get_db()
+    chat_context(conn, claim_id)
+    row = conn.execute(
+        "SELECT 1 FROM messages WHERE claim_id = ? AND file_name = ?", (claim_id, name)
+    ).fetchone()
+    conn.close()
+    if row is None:
+        abort(404)
+    extension = name.rsplit(".", 1)[-1].lower()
+    response = send_from_directory(
+        CHAT_UPLOAD_FOLDER, name, as_attachment=(extension not in CHAT_IMAGE_EXTENSIONS)
+    )
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 @app.route("/chat/<int:claim_id>/new")
@@ -830,7 +890,7 @@ def chat_new(claim_id):
     conn = get_db()
     chat_context(conn, claim_id)
     rows = conn.execute(
-        "SELECT id, sender_id, body, created_at FROM messages "
+        "SELECT id, sender_id, body, file_name, created_at FROM messages "
         "WHERE claim_id = ? AND id > ? ORDER BY id",
         (claim_id, after),
     ).fetchall()
@@ -840,11 +900,21 @@ def chat_new(claim_id):
     )
     conn.commit()
     conn.close()
-    return jsonify([
-        {"id": r["id"], "mine": r["sender_id"] == session["user_id"],
-         "body": r["body"], "time": r["created_at"]}
-        for r in rows
-    ])
+    out = []
+    for r in rows:
+        file_url = None
+        is_image = False
+        ext = ""
+        if r["file_name"]:
+            file_url = url_for("chat_file", claim_id=claim_id, name=r["file_name"])
+            ext = r["file_name"].rsplit(".", 1)[-1].lower()
+            is_image = ext in CHAT_IMAGE_EXTENSIONS
+        out.append({
+            "id": r["id"], "mine": r["sender_id"] == session["user_id"],
+            "body": r["body"] or "", "time": r["created_at"],
+            "file_url": file_url, "is_image": is_image, "ext": ext,
+        })
+    return jsonify(out)
 
 
 @app.route("/activity")
