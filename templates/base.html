@@ -49,7 +49,7 @@
                     </div>
                 </div>
                 {% if is_admin %}<a href="/admin/users">Manage users</a><a href="/admin/activity">Activity log</a><span class="admin-pill">ADMIN</span>{% endif %}
-                <span class="nav-user">Hi, {{ session.user_name }}</span>
+                <a class="nav-user" href="/profile" title="My profile">Hi, {{ session.user_name }}</a>
                 <a href="/logout">Logout</a>
             {% else %}
                 <a class="btn-small" href="/login">Login</a>

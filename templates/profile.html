@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}My profile - SmartFind{% endblock %}
+{% block content %}
+    <div class="card form-card">
+        <h1 class="page-title">My profile</h1>
+        <p class="subtitle">{{ user.name }} &nbsp;·&nbsp; {{ user.email }}</p>
+        <form method="POST">
+            <label>Phone number</label>
+            <input type="tel" name="phone" value="{{ user.phone or '' }}"
+                   placeholder="e.g. 9876543210" maxlength="20">
+            <button type="submit" class="btn-full">Save</button>
+        </form>
+        <p class="meta">
+            Your number is private. It is only shown to the other person in a chat, and only
+            if you switch on "Allow calls" in that chat. Leave it empty and save to remove it.
+        </p>
+        <p><a href="/change-password">Change password</a></p>
+    </div>
+{% endblock %}

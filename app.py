@@ -1,4 +1,5 @@
 import os
+import re
 import sqlite3
 import secrets
 import time
@@ -357,6 +358,11 @@ def resolve(item_id):
             "SELECT title FROM items WHERE id = ?", (item_id,)
         ).fetchone()["title"]
         log_event(conn, item_id, "item_resolved", session["user_id"], detail=title)
+        conn.execute(
+            "DELETE FROM call_consent WHERE claim_id IN "
+            "(SELECT id FROM claims WHERE item_id = ?)",
+            (item_id,),
+        )
     conn.commit()
     conn.close()
 
@@ -468,7 +474,7 @@ def item_detail(item_id):
         if is_owner:
             claims = conn.execute(
                 "SELECT claims.id, claims.answer, claims.status, claims.created_at, "
-                "users.name AS claimant_name "
+                "claims.anonymous, users.name AS claimant_name "
                 "FROM claims JOIN users ON users.id = claims.claimant_id "
                 "WHERE claims.item_id = ? ORDER BY claims.id",
                 (item_id,),
@@ -519,6 +525,12 @@ def temp_password():
     return "".join(secrets.choice(PASSWORD_CHARS) for _ in range(8))
 
 
+def normalize_phone(raw):
+    """Return a clean phone number like +919876543210, or None if it looks wrong."""
+    phone = re.sub(r"[\s\-().]", "", raw or "")
+    return phone if re.fullmatch(r"\+?\d{7,15}", phone) else None
+
+
 @app.route("/admin/users", methods=["GET", "POST"])
 def admin_users():
     if not is_admin_user():
@@ -537,21 +549,31 @@ def admin_users():
                 if not line:
                     continue
                 parts = [p.strip() for p in line.split(",")]
+                phone = None
                 if len(parts) == 1 and "@" in parts[0]:
                     name, email = parts[0].split("@")[0], parts[0].lower()
                 elif len(parts) >= 2 and "@" in parts[1]:
                     name, email = parts[0], parts[1].lower()
+                    if len(parts) >= 3 and parts[2]:
+                        phone = normalize_phone(parts[2])
+                        if phone is None:
+                            skipped.append(f"{line}  (phone number looks wrong)")
+                            continue
                 else:
-                    skipped.append(f"{line}  (use: Name, email)")
+                    skipped.append(f"{line}  (use: Name, email, phone)")
                     continue
                 if conn.execute("SELECT 1 FROM users WHERE email = ?", (email,)).fetchone():
-                    skipped.append(f"{email}  (already has an account)")
+                    if phone:
+                        conn.execute("UPDATE users SET phone = ? WHERE email = ?", (phone, email))
+                        skipped.append(f"{email}  (already had an account - phone number updated)")
+                    else:
+                        skipped.append(f"{email}  (already has an account)")
                     continue
                 password = temp_password()
                 conn.execute(
-                    "INSERT INTO users (name, email, password_hash, must_change_password) "
-                    "VALUES (?, ?, ?, 1)",
-                    (name, email, generate_password_hash(password)),
+                    "INSERT INTO users (name, email, password_hash, must_change_password, phone) "
+                    "VALUES (?, ?, ?, 1, ?)",
+                    (name, email, generate_password_hash(password), phone),
                 )
                 created.append((name, email, password))
 
@@ -577,6 +599,33 @@ def admin_users():
     ).fetchall()
     conn.close()
     return render_template("admin_users.html", users=users, created=created, skipped=skipped)
+
+
+@app.route("/profile", methods=["GET", "POST"])
+def profile():
+    conn = get_db()
+    user = conn.execute(
+        "SELECT name, email, phone FROM users WHERE id = ?", (session["user_id"],)
+    ).fetchone()
+    if request.method == "POST":
+        raw = request.form.get("phone", "").strip()
+        if raw == "":
+            conn.execute("UPDATE users SET phone = NULL WHERE id = ?", (session["user_id"],))
+            conn.execute("DELETE FROM call_consent WHERE user_id = ?", (session["user_id"],))
+            flash("Phone number removed. Calls are switched off in all your chats.")
+        else:
+            phone = normalize_phone(raw)
+            if phone is None:
+                conn.close()
+                flash("Please enter a valid phone number (7 to 15 digits, optionally starting with +).")
+                return redirect(url_for("profile"))
+            conn.execute("UPDATE users SET phone = ? WHERE id = ?", (phone, session["user_id"]))
+            flash("Phone number saved.")
+        conn.commit()
+        conn.close()
+        return redirect(url_for("profile"))
+    conn.close()
+    return render_template("profile.html", user=user)
 
 
 @app.route("/change-password", methods=["GET", "POST"])
@@ -657,9 +706,10 @@ def claim(item_id):
             conn.close()
             flash("Please write your answer.")
             return redirect(url_for("claim", item_id=item_id))
+        anonymous = 1 if request.form.get("anonymous") else 0
         cur = conn.execute(
-            "INSERT INTO claims (item_id, claimant_id, answer) VALUES (?, ?, ?)",
-            (item_id, session["user_id"], answer),
+            "INSERT INTO claims (item_id, claimant_id, answer, anonymous) VALUES (?, ?, ?, ?)",
+            (item_id, session["user_id"], answer, anonymous),
         )
         conn.execute(
             "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
@@ -667,7 +717,7 @@ def claim(item_id):
         )
         notify(
             conn, item["user_id"],
-            f'{session["user_name"]} claimed your item "{item["title"]}".',
+            f'{"Someone" if anonymous else session["user_name"]} claimed your item "{item["title"]}".',
             url_for("item_detail", item_id=item_id),
         )
         conn.commit()
@@ -809,12 +859,69 @@ def chat(claim_id):
         "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND link = ?",
         (session["user_id"], url_for("chat", claim_id=claim_id)),
     )
+    closed = bool(item["resolved"])
+    my_allow, their_phone, i_have_phone = get_call_state(conn, claim_id, session["user_id"], closed)
     conn.commit()
     conn.close()
     return render_template(
         "chat.html", claim=claim, item=item, role=role, messages=messages,
-        me=session["user_id"], closed=bool(item["resolved"]),
+        me=session["user_id"], closed=closed,
+        my_allow=my_allow, their_phone=their_phone, i_have_phone=i_have_phone,
     )
+
+
+def get_call_state(conn, claim_id, user_id, closed):
+    """Return (my_allow, their_phone, i_have_phone).
+
+    their_phone is only given when the other person has switched on
+    "Allow calls" for this chat and the chat is still open."""
+    me = conn.execute("SELECT phone FROM users WHERE id = ?", (user_id,)).fetchone()
+    i_have_phone = bool(me and me["phone"])
+    if closed:
+        return False, None, i_have_phone
+    my_allow = conn.execute(
+        "SELECT 1 FROM call_consent WHERE claim_id = ? AND user_id = ?",
+        (claim_id, user_id),
+    ).fetchone() is not None
+    theirs = conn.execute(
+        "SELECT users.phone FROM call_consent JOIN users ON users.id = call_consent.user_id "
+        "WHERE call_consent.claim_id = ? AND call_consent.user_id != ?",
+        (claim_id, user_id),
+    ).fetchone()
+    their_phone = theirs["phone"] if theirs and theirs["phone"] else None
+    return my_allow, their_phone, i_have_phone
+
+
+@app.route("/chat/<int:claim_id>/calls", methods=["POST"])
+def chat_calls(claim_id):
+    conn = get_db()
+    claim, item, role = chat_context(conn, claim_id)
+    back = url_for("chat", claim_id=claim_id)
+    if item["resolved"]:
+        conn.close()
+        flash("This item was returned, so the chat is now read-only.")
+        return redirect(back)
+
+    if request.form.get("action") == "off":
+        conn.execute(
+            "DELETE FROM call_consent WHERE claim_id = ? AND user_id = ?",
+            (claim_id, session["user_id"]),
+        )
+        flash("Calls are switched off. The other person can no longer see your number.")
+    else:
+        me = conn.execute("SELECT phone FROM users WHERE id = ?", (session["user_id"],)).fetchone()
+        if not me or not me["phone"]:
+            conn.close()
+            flash("Your account has no phone number yet. Ask the admin to add it.")
+            return redirect(back)
+        conn.execute(
+            "INSERT OR IGNORE INTO call_consent (claim_id, user_id) VALUES (?, ?)",
+            (claim_id, session["user_id"]),
+        )
+        flash("Calls are on. The other person can now call you from this chat.")
+    conn.commit()
+    conn.close()
+    return redirect(back)
 
 
 @app.route("/chat/<int:claim_id>/send", methods=["POST"])
@@ -888,7 +995,7 @@ def chat_file(claim_id, name):
 def chat_new(claim_id):
     after = request.args.get("after", 0, type=int)
     conn = get_db()
-    chat_context(conn, claim_id)
+    claim, item, role = chat_context(conn, claim_id)
     rows = conn.execute(
         "SELECT id, sender_id, body, file_name, created_at FROM messages "
         "WHERE claim_id = ? AND id > ? ORDER BY id",
@@ -898,6 +1005,7 @@ def chat_new(claim_id):
         "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND link = ?",
         (session["user_id"], url_for("chat", claim_id=claim_id)),
     )
+    _, their_phone, _ = get_call_state(conn, claim_id, session["user_id"], bool(item["resolved"]))
     conn.commit()
     conn.close()
     out = []
@@ -914,7 +1022,7 @@ def chat_new(claim_id):
             "body": r["body"] or "", "time": r["created_at"],
             "file_url": file_url, "is_image": is_image, "ext": ext,
         })
-    return jsonify(out)
+    return jsonify({"messages": out, "phone": their_phone})
 
 
 @app.route("/activity")
@@ -975,7 +1083,7 @@ def activity():
     else:
         query = (
             "SELECT claims.id, claims.status AS claim_status, claims.answer, "
-            "claims.created_at, items.id AS item_id, items.title, "
+            "claims.created_at, claims.anonymous, items.id AS item_id, items.title, "
             "users.name AS claimant_name "
             "FROM claims JOIN items ON items.id = claims.item_id "
             "JOIN users ON users.id = claims.claimant_id "
@@ -983,7 +1091,7 @@ def activity():
         )
         params = [uid]
         if q:
-            query += (" AND (items.title LIKE ? OR users.name LIKE ? "
+            query += (" AND (items.title LIKE ? OR (claims.anonymous = 0 AND users.name LIKE ?) "
                       "OR claims.answer LIKE ?)")
             params += [like, like, like]
         if status:

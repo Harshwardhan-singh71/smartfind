@@ -4,15 +4,41 @@
     <p><a href="/item/{{ item.id }}">← Back to item</a></p>
 
     <div class="card chat-card">
-        <h1 class="page-title">Chat</h1>
-        <p class="subtitle">
-            About: <b>{{ item.title }}</b><br>
-            You are chatting with the {% if role == 'finder' %}person who claimed it{% else %}finder{% endif %}.
-        </p>
+        <div class="chat-head">
+            <div>
+                <h1 class="page-title">Chat</h1>
+                <p class="subtitle">
+                    About: <b>{{ item.title }}</b><br>
+                    You are chatting with the {% if role == 'finder' %}person who claimed it{% else %}finder{% endif %}.
+                </p>
+            </div>
+            {% if not closed %}
+            <button type="button" id="call-icon" class="call-icon {% if not their_phone %}off{% endif %}"
+                    {% if their_phone %}data-phone="{{ their_phone }}"{% endif %}
+                    title="{% if their_phone %}Call{% else %}The other person has not allowed calls{% endif %}">📞</button>
+            {% endif %}
+        </div>
         <p class="chat-safety">
-            🔒 Phone numbers are not shared here. Meet in a public place on campus, or at the
-            security desk. Never share OTPs or passwords. SmartFind never asks for money.
+            🔒 Phone numbers stay hidden unless a person switches on calls for this chat.
+            Meet in a public place on campus, or at the security desk. Never share OTPs or
+            passwords. SmartFind never asks for money.
         </p>
+
+        {% if not closed %}
+        <form method="POST" action="/chat/{{ claim.id }}/calls" class="call-setting">
+            {% if my_allow %}
+                <span>📞 The other person can call you from this chat.</span>
+                <input type="hidden" name="action" value="off">
+                <button type="submit" class="btn-outline">Turn off</button>
+            {% elif i_have_phone %}
+                <span>Let the other person call you from this chat?</span>
+                <input type="hidden" name="action" value="on">
+                <button type="submit" class="btn-outline">Allow calls</button>
+            {% else %}
+                <span class="meta">Your account has no phone number yet, so calls are unavailable. Ask the admin to add it.</span>
+            {% endif %}
+        </form>
+        {% endif %}
 
         <div class="chat-box" id="chat-box" data-last="{{ messages[-1].id if messages else 0 }}">
             {% for m in messages %}
@@ -92,14 +118,45 @@
                 last = m.id;
             }
 
+            var callIcon = document.getElementById("call-icon");
+            function showPhone(phone) {
+                if (!callIcon) return;
+                if (phone) {
+                    callIcon.setAttribute("data-phone", phone);
+                    callIcon.classList.remove("off");
+                    callIcon.title = "Call";
+                } else {
+                    callIcon.removeAttribute("data-phone");
+                    callIcon.classList.add("off");
+                    callIcon.title = "The other person has not allowed calls";
+                }
+            }
+            var isPhone = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+            if (callIcon) {
+                callIcon.addEventListener("click", function () {
+                    var phone = callIcon.getAttribute("data-phone");
+                    if (!phone) {
+                        alert("The other person has not allowed calls in this chat yet. You can ask them in a message.");
+                        return;
+                    }
+                    if (!isPhone) {
+                        alert("Calls can only be placed from a phone, for privacy. Open SmartFind on your phone to call.");
+                        return;
+                    }
+                    window.location.href = "tel:" + phone;
+                });
+            }
+
             function poll() {
                 fetch("/chat/{{ claim.id }}/new?after=" + last, {credentials: "same-origin"})
-                    .then(function (r) { return r.ok ? r.json() : []; })
-                    .then(function (rows) {
-                        if (rows.length) {
-                            rows.forEach(add);
+                    .then(function (r) { return r.ok ? r.json() : null; })
+                    .then(function (data) {
+                        if (!data) return;
+                        if (data.messages.length) {
+                            data.messages.forEach(add);
                             box.scrollTop = box.scrollHeight;
                         }
+                        showPhone(data.phone);
                     })
                     .catch(function () {});
             }

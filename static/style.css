@@ -632,3 +632,7 @@ button.bell-link {
 .msg-file { display: inline-block; margin-bottom: 4px; color: inherit; font-weight: 600; text-decoration: underline; }
 .attach { display: block; width: 100%; font-size: 13px; color: #1d2b64; cursor: pointer; margin-top: 4px; }
 .chat-form { flex-wrap: wrap; }
+.chat-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.call-icon { font-size: 22px; line-height: 1; width: 44px; height: 44px; border-radius: 50%; border: none; background: #2e7d32; color: #fff; cursor: pointer; flex-shrink: 0; }
+.call-icon.off { background: #c8c8c8; }
+.call-setting { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #f5f7ff; border: 1px solid #dde3f5; border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
