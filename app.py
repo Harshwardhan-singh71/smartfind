@@ -13,7 +13,13 @@ from werkzeug.utils import secure_filename
 from matcher import find_matches
 
 app = Flask(__name__)
-app.secret_key = "change-this-to-any-long-random-text-123"
+# Secret key comes from an environment variable. The fallback is only for local testing.
+app.secret_key = os.environ.get("SMARTFIND_SECRET_KEY", "dev-only-change-me")
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=60)   # stay logged in
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Only send the cookie over HTTPS when deployed (set SMARTFIND_HTTPS=1 there).
+app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SMARTFIND_HTTPS") == "1"
 
 UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
@@ -322,6 +328,7 @@ def login():
 
         FAILED_LOGINS.pop(key, None)
         session.clear()
+        session.permanent = True
         session["user_id"] = user["id"]
         session["user_name"] = user["name"]
         session["user_email"] = user["email"]
