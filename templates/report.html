@@ -3,8 +3,14 @@
 {% block content %}
     <div class="card form-card">
         <h1 class="page-title">Report an Item</h1>
-        <p class="subtitle">Tell us what you lost, found or saw.</p>
+        <p class="subtitle">Start with a photo. Only the name and place are required.</p>
         <form method="POST" enctype="multipart/form-data">
+
+           <label>Photo (optional: take one or choose from gallery. If you only saw the item, you can skip it)</label>
+            <input type="file" name="photo" id="photo-input" accept="image/*">
+            <img id="photo-preview" alt="Preview"
+                 style="display: none; max-width: 100%; max-height: 260px; border-radius: 8px; margin-top: 8px;">
+
             <label>I have...</label>
             <select name="status" id="status-select" required>
                 <option value="lost">Lost something</option>
@@ -12,26 +18,8 @@
                 <option value="seen">Seen something (I don't have it)</option>
             </select>
 
-            <label>Photo (optional, PNG/JPG/WEBP, max 20 MB)</label>
-            <input type="file" name="photo" accept="image/*">
-
             <label>Item name</label>
             <input type="text" name="title" placeholder="e.g. Blue water bottle" required>
-
-            <label>Description</label>
-            <textarea name="description" rows="3" placeholder="Colour, brand, marks, anything that helps identify it"></textarea>
-
-            <label>Category</label>
-            <select name="category">
-                <option>Wallet</option>
-                <option>Bottle</option>
-                <option>Electronics</option>
-                <option>Books</option>
-                <option>ID Card</option>
-                <option>Keys</option>
-                <option>Clothing</option>
-                <option>Other</option>
-            </select>
 
             <label>Where?</label>
             <input type="text" name="place" list="place-options" placeholder="Pick from the list or type your own" required>
@@ -52,14 +40,33 @@
                 <option value="Hostel">
             </datalist>
 
-            <label>Place details (optional)</label>
-            <input type="text" name="place_details" placeholder="e.g. Room 204, near the pavilion, bike row B">
+            <details style="margin-top: 16px;">
+                <summary style="cursor: pointer; font-weight: 600;">More details (optional, helps matching)</summary>
 
-            <label>Date (optional)</label>
-            <input type="date" name="event_date">
+                <label>Description</label>
+                <textarea name="description" rows="3" placeholder="Colour, brand, marks, anything that helps identify it"></textarea>
 
-            <label>Approximate time (optional)</label>
-            <input type="time" name="event_time">
+                <label>Category</label>
+                <select name="category">
+                    <option>Wallet</option>
+                    <option>Bottle</option>
+                    <option>Electronics</option>
+                    <option>Books</option>
+                    <option>ID Card</option>
+                    <option>Keys</option>
+                    <option>Clothing</option>
+                    <option selected>Other</option>
+                </select>
+
+                <label>Place details</label>
+                <input type="text" name="place_details" placeholder="e.g. Room 204, near the pavilion, bike row B">
+
+                <label>Date</label>
+                <input type="date" name="event_date">
+
+                <label>Approximate time</label>
+                <input type="time" name="event_time">
+            </details>
 
             <div id="found-options" style="display: none;">
                 <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">
@@ -87,7 +94,7 @@
             <button type="submit" class="btn-full">Submit</button>
         </form>
     </div>
-        <script>
+    <script>
         var sel = document.getElementById("status-select");
         var box = document.getElementById("found-options");
         function toggle() {
@@ -99,5 +106,17 @@
         }
         sel.addEventListener("change", toggle);
         toggle();
+
+        var photoInput = document.getElementById("photo-input");
+        var preview = document.getElementById("photo-preview");
+        photoInput.addEventListener("change", function () {
+            var f = photoInput.files[0];
+            if (f) {
+                preview.src = URL.createObjectURL(f);
+                preview.style.display = "block";
+            } else {
+                preview.style.display = "none";
+            }
+        });
     </script>
 {% endblock %}
