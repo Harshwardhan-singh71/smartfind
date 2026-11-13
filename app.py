@@ -244,6 +244,16 @@ def report():
             private_question = request.form.get("private_question", "").strip() or None
             at_security = 1 if request.form.get("at_security") else 0
 
+        # Extra detail rows (label + value), up to 5, all optional
+        labels = request.form.getlist("detail_label")
+        values = request.form.getlist("detail_value")
+        extra_details = []
+        for label, value in zip(labels, values):
+            label, value = label.strip()[:40], value.strip()[:200]
+            if label and value:
+                extra_details.append((label, value))
+        extra_details = extra_details[:5]
+
         conn = get_db()
         cur = conn.execute(
             "INSERT INTO items (title, description, category, location, status, "
@@ -268,6 +278,11 @@ def report():
                 at_security,
             ),
         )
+        for label, value in extra_details:
+            conn.execute(
+                "INSERT INTO item_details (item_id, label, value) VALUES (?, ?, ?)",
+                (cur.lastrowid, label, value),
+            )
         log_event(conn, cur.lastrowid, "item_posted", session["user_id"],
                   detail=request.form["title"])
         notify_matches(conn, cur.lastrowid)
@@ -473,6 +488,11 @@ def item_detail(item_id):
         conn.close()
         return "Item not found", 404
 
+    details = conn.execute(
+        "SELECT label, value FROM item_details WHERE item_id = ? ORDER BY id",
+        (item_id,),
+    ).fetchall()
+
     is_owner = "user_id" in session and session["user_id"] == item["user_id"]
     claims = []
     my_claim = None
@@ -500,7 +520,7 @@ def item_detail(item_id):
     conn.close()
     return render_template(
         "item.html", item=item, is_owner=is_owner, claims=claims,
-        my_claim=my_claim, has_alert=has_alert,
+        my_claim=my_claim, has_alert=has_alert, details=details,
     )
 
 

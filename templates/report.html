@@ -40,7 +40,7 @@
                 <option value="Hostel">
             </datalist>
 
-            <details style="margin-top: 16px;">
+                        <details style="margin-top: 16px;">
                 <summary style="cursor: pointer; font-weight: 600;">More details (optional, helps matching)</summary>
 
                 <label>Description</label>
@@ -58,6 +58,22 @@
                     <option selected>Other</option>
                 </select>
 
+                <label>Extra details</label>
+                <p class="meta" style="margin-top: 2px;">
+                    Add up to 5, like Brand, Sticker or Contents. These are shown publicly,
+                    so don't put secrets here.
+                </p>
+                <div id="detail-rows"></div>
+                <button type="button" id="add-detail" class="btn-outline" style="margin-top: 8px;">+ Add a detail</button>
+                <datalist id="detail-labels">
+                    <option value="Brand">
+                    <option value="Colour">
+                    <option value="Size">
+                    <option value="Model">
+                    <option value="Sticker / marks">
+                    <option value="Contents">
+                </datalist>
+
                 <label>Place details</label>
                 <input type="text" name="place_details" placeholder="e.g. Room 204, near the pavilion, bike row B">
 
@@ -67,6 +83,29 @@
                 <label>Approximate time</label>
                 <input type="time" name="event_time">
             </details>
+            <script>
+                (function () {
+                    var rows = document.getElementById("detail-rows");
+                    var addBtn = document.getElementById("add-detail");
+                    addBtn.addEventListener("click", function () {
+                        if (rows.children.length >= 5) return;
+                        var div = document.createElement("div");
+                        div.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
+                        div.innerHTML =
+                            '<input type="text" name="detail_label" list="detail-labels" maxlength="40" placeholder="Label (e.g. Brand)" style="flex: 1;">' +
+                            '<input type="text" name="detail_value" maxlength="200" placeholder="Detail (e.g. Boat)" style="flex: 2;">' +
+                            '<button type="button" class="btn-outline remove-detail">✕</button>';
+                        rows.appendChild(div);
+                        if (rows.children.length >= 5) addBtn.style.display = "none";
+                    });
+                    rows.addEventListener("click", function (e) {
+                        if (e.target.classList.contains("remove-detail")) {
+                            e.target.parentNode.remove();
+                            addBtn.style.display = "";
+                        }
+                    });
+                })();
+            </script>
 
             <div id="found-options" style="display: none;">
                 <hr style="margin: 20px 0; border: none; border-top: 1px solid var(--border);">

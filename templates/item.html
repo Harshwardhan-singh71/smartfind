@@ -10,7 +10,7 @@
         <p><a href="/">← Back to all items</a></p>
     {% endif %}
 
-    <div class="card detail-card {% if item.resolved %}resolved{% endif %}">
+        <div class="card detail-card {% if item.resolved %}resolved{% endif %}">
         <div class="card-top">
             <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
             <span class="meta">Posted {{ item.date_reported }}</span>
@@ -20,6 +20,13 @@
             <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
         {% endif %}
         <p>{{ item.description }}</p>
+        {% if details %}
+            <ul style="padding-left: 18px; margin: 8px 0;">
+                {% for d in details %}
+                    <li><b>{{ d.label }}:</b> {{ d.value }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
         <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
         {% if item.event_date %}
             <p class="meta">🕒 {{ item.event_date }}{% if item.event_time %}, {{ item.event_time }}{% endif %}</p>
