@@ -1257,5 +1257,48 @@ def notifications_read_all():
     return redirect(request.referrer or url_for("notifications"))
 
 
+REPORT_REASONS = {
+    "spam": "Spam or not a real item",
+    "fake": "Fake or misleading",
+    "abuse": "Rude or abusive",
+    "private": "Shows private information",
+    "other": "Something else",
+}
+
+
+@app.route("/report-post/<int:item_id>", methods=["POST"])
+def report_post(item_id):
+    reason = request.form.get("reason", "")
+    if reason not in REPORT_REASONS:
+        flash("Please choose a reason for the report.")
+        return redirect(url_for("item_detail", item_id=item_id))
+    note = request.form.get("note", "").strip()[:300] or None
+
+    conn = get_db()
+    item = conn.execute(
+        "SELECT user_id FROM items WHERE id = ?", (item_id,)
+    ).fetchone()
+    if item is None:
+        conn.close()
+        abort(404)
+    if item["user_id"] == session["user_id"]:
+        conn.close()
+        flash("You can't report your own post.")
+        return redirect(url_for("item_detail", item_id=item_id))
+
+    cur = conn.execute(
+        "INSERT OR IGNORE INTO post_reports (item_id, reporter_id, reason, note) "
+        "VALUES (?, ?, ?, ?)",
+        (item_id, session["user_id"], reason, note),
+    )
+    conn.commit()
+    conn.close()
+    if cur.rowcount:
+        flash("Thanks. The admin will review this post.")
+    else:
+        flash("You have already reported this post.")
+    return redirect(url_for("item_detail", item_id=item_id))
+
+
 if __name__ == "__main__":
     app.run(debug=True)

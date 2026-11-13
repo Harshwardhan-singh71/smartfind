@@ -10,7 +10,7 @@
         <p><a href="/">← Back to all items</a></p>
     {% endif %}
 
-        <div class="card detail-card {% if item.resolved %}resolved{% endif %}">
+    <div class="card detail-card {% if item.resolved %}resolved{% endif %}">
         <div class="card-top">
             <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
             <span class="meta">Posted {{ item.date_reported }}</span>
@@ -119,6 +119,28 @@
         {% else %}
             <p class="meta">No claims yet.</p>
         {% endif %}
+    </div>
+    {% endif %}
+
+    {% if session.user_id and not is_owner and not is_admin %}
+    <div class="card">
+        <details>
+            <summary class="meta" style="cursor: pointer;">🚩 Report this post</summary>
+            <form method="POST" action="/report-post/{{ item.id }}" style="margin-top: 10px;">
+                <label>Why are you reporting it?</label>
+                <select name="reason" required>
+                    <option value="">Choose a reason</option>
+                    <option value="spam">Spam or not a real item</option>
+                    <option value="fake">Fake or misleading</option>
+                    <option value="abuse">Rude or abusive</option>
+                    <option value="private">Shows private information</option>
+                    <option value="other">Something else</option>
+                </select>
+                <label>Note (optional)</label>
+                <input type="text" name="note" maxlength="300" placeholder="Anything the admin should know">
+                <button type="submit" class="btn-danger">Send report</button>
+            </form>
+        </details>
     </div>
     {% endif %}
 {% endblock %}
