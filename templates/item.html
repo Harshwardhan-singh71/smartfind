@@ -59,9 +59,23 @@
             </form>
         {% endif %}
     </div>
-    {% elif not item.resolved and item.status in ('found', 'lost') %}
+    {% elif not item.resolved and item.status in ('found', 'lost', 'seen') %}
     <div class="card">
-        {% if item.status == 'found' %}
+        {% if item.status == 'seen' %}
+            {% if my_claim %}
+                {% if my_claim.status == 'pending' %}
+                    <p class="meta">✅ Your request was sent. Waiting for a reply.</p>
+                {% elif my_claim.status == 'accepted' %}
+                    <p><b>🎉 Your request was accepted!</b></p>
+                    <a class="btn" href="/chat/{{ my_claim.id }}">Open chat</a>
+                {% else %}
+                    <p class="meta">Your request was not accepted.</p>
+                {% endif %}
+            {% else %}
+                <p class="meta">Is this your lost item? The person who saw it may not have it with them.</p>
+                <a class="btn" href="/claim/{{ item.id }}">Ask about this sighting</a>
+            {% endif %}
+        {% elif item.status == 'found' %}
             {% if my_claim %}
                 {% if my_claim.status == 'pending' %}
                     <p class="meta">✅ You have claimed this item. Waiting for the finder to review it.</p>
@@ -90,16 +104,16 @@
     </div>
     {% endif %}
 
-    {% if is_owner and item.status == 'found' %}
+    {% if is_owner and item.status in ('found', 'seen') %}
     <div class="card">
-        <h3>Claims on this item</h3>
+        <h3>{% if item.status == 'seen' %}Requests about this sighting{% else %}Claims on this item{% endif %}</h3>
         {% if item.private_question %}
             <p class="meta">Your question: <b>{{ item.private_question }}</b></p>
         {% endif %}
         {% if claims %}
             {% for c in claims %}
                 <div style="border-top: 1px solid var(--border); padding: 12px 0;">
-                    <p><b>{{ c.claimant_name }}</b>
+                    <p><b>{{ 'Anonymous' if c.anonymous else c.claimant_name }}</b>
                        <span class="meta">&nbsp;· {{ c.created_at }} · {{ c.status }}</span></p>
                     <p>{{ c.answer }}</p>
                     {% if c.status == 'pending' and not item.resolved %}
@@ -117,7 +131,7 @@
                 </div>
             {% endfor %}
         {% else %}
-            <p class="meta">No claims yet.</p>
+            <p class="meta">Nothing yet.</p>
         {% endif %}
     </div>
     {% endif %}

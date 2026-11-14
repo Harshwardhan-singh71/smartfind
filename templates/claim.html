@@ -1,12 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Claim this item - SmartFind{% endblock %}
+{% block title %}{% if is_sighting %}Ask about this sighting{% else %}Claim this item{% endif %} - SmartFind{% endblock %}
 {% block content %}
     <p><a href="/item/{{ item.id }}">← Back to item</a></p>
     <div class="card form-card">
-        <h1 class="page-title">This is mine</h1>
+        <h1 class="page-title">{% if is_sighting %}Ask about this sighting{% else %}This is mine{% endif %}</h1>
         <p class="subtitle">{{ item.title }}</p>
         <form method="POST">
-            {% if item.private_question %}
+            {% if is_sighting %}
+                <label>What did you lose? Tell them so they know you are the right person</label>
+                <textarea name="answer" rows="3" required
+                          placeholder="What it is, colour, where you think you lost it, anything that helps"></textarea>
+            {% elif item.private_question %}
                 <label>The finder asks:</label>
                 <p><b>{{ item.private_question }}</b></p>
                 <label>Your answer</label>
@@ -17,8 +21,15 @@
                 <textarea name="answer" rows="3" required
                           placeholder="Colour, brand, marks, what's inside, anything only the owner would know"></textarea>
             {% endif %}
-            <button type="submit" class="btn-full">Send claim</button>
+            <label class="check-row">
+                <input type="checkbox" name="anonymous" value="1" style="width: auto; margin-right: 6px;">
+                Hide my name (they will see "Anonymous")
+            </label>
+            <button type="submit" class="btn-full">{% if is_sighting %}Send request{% else %}Send claim{% endif %}</button>
         </form>
-        <p class="meta">The finder will see your answer and decide. Your contact details stay private.</p>
+        <p class="meta">
+            {% if is_sighting %}The person who saw it will decide whether to chat. Your contact details stay private.
+            {% else %}The finder will see your answer and decide. Your contact details stay private.{% endif %}
+        </p>
     </div>
 {% endblock %}

@@ -9,7 +9,7 @@
                 <h1 class="page-title">Chat</h1>
                 <p class="subtitle">
                     About: <b>{{ item.title }}</b><br>
-                    You are chatting with the {% if role == 'finder' %}person who claimed it{% else %}finder{% endif %}.
+                    {% if item.status == 'seen' %}You are chatting with the {% if role == 'finder' %}person asking about it{% else %}person who saw it{% endif %}.{% else %}You are chatting with the {% if role == 'finder' %}person who claimed it{% else %}finder{% endif %}.{% endif %}
                 </p>
             </div>
             {% if not closed %}
@@ -18,6 +18,9 @@
                     title="{% if their_phone %}Call{% else %}The other person has not allowed calls{% endif %}">📞</button>
             {% endif %}
         </div>
+        {% if item.status == 'seen' %}
+        <p class="meta">⚠️ This is an unverified sighting. The person who posted it may not have the item with them.</p>
+        {% endif %}
         <p class="chat-safety">
             🔒 Phone numbers stay hidden unless a person switches on calls for this chat.
             Meet in a public place on campus, or at the security desk. Never share OTPs or

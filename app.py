@@ -497,7 +497,7 @@ def item_detail(item_id):
     claims = []
     my_claim = None
     has_alert = False
-    if item["status"] == "found":
+    if item["status"] in ("found", "seen"):
         if is_owner:
             claims = conn.execute(
                 "SELECT claims.id, claims.answer, claims.status, claims.created_at, "
@@ -700,14 +700,17 @@ def claim(item_id):
         conn.close()
         abort(404)
 
-    if item["status"] != "found" or item["resolved"]:
+    is_sighting = item["status"] == "seen"
+    if item["status"] not in ("found", "seen") or item["resolved"]:
         conn.close()
         flash("This item can't be claimed.")
         return redirect(url_for("item_detail", item_id=item_id))
 
-    accepted = conn.execute(
-        "SELECT 1 FROM claims WHERE item_id = ? AND status = 'accepted'", (item_id,)
-    ).fetchone()
+    accepted = None
+    if not is_sighting:   # a sighting can have several chats; a found item only one
+        accepted = conn.execute(
+            "SELECT 1 FROM claims WHERE item_id = ? AND status = 'accepted'", (item_id,)
+        ).fetchone()
     if accepted:
         conn.close()
         flash("The finder has already accepted a claim for this item.")
@@ -718,20 +721,25 @@ def claim(item_id):
         flash("You posted this item, so you can't claim it.")
         return redirect(url_for("item_detail", item_id=item_id))
 
+    if item["user_id"] is None:
+        conn.close()
+        flash("This is a sample item with no owner, so it can't be claimed.")
+        return redirect(url_for("item_detail", item_id=item_id))
+
     existing = conn.execute(
         "SELECT 1 FROM claims WHERE item_id = ? AND claimant_id = ?",
         (item_id, session["user_id"]),
     ).fetchone()
     if existing:
         conn.close()
-        flash("You have already claimed this item. Please wait for the finder.")
+        flash("You have already sent a request for this item. Please wait for a reply.")
         return redirect(url_for("item_detail", item_id=item_id))
 
     if request.method == "POST":
         answer = request.form.get("answer", "").strip()
         if not answer:
             conn.close()
-            flash("Please write your answer.")
+            flash("Please write a short message.")
             return redirect(url_for("claim", item_id=item_id))
         anonymous = 1 if request.form.get("anonymous") else 0
         cur = conn.execute(
@@ -742,18 +750,19 @@ def claim(item_id):
             "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
             (item_id, cur.lastrowid, session["user_id"], "claim_created"),
         )
-        notify(
-            conn, item["user_id"],
-            f'{"Someone" if anonymous else session["user_name"]} claimed your item "{item["title"]}".',
-            url_for("item_detail", item_id=item_id),
-        )
+        who = "Someone" if anonymous else session["user_name"]
+        if is_sighting:
+            note = f'{who} wants to ask about your sighting "{item["title"]}".'
+        else:
+            note = f'{who} claimed your item "{item["title"]}".'
+        notify(conn, item["user_id"], note, url_for("item_detail", item_id=item_id))
         conn.commit()
         conn.close()
-        flash("Claim sent. The finder will review it.")
+        flash("Request sent. You will be notified when they reply." if is_sighting else "Claim sent. The finder will review it.")
         return redirect(url_for("item_detail", item_id=item_id))
 
     conn.close()
-    return render_template("claim.html", item=item)
+    return render_template("claim.html", item=item, is_sighting=is_sighting)
 
 
 @app.route("/claim/<int:claim_id>/decide", methods=["POST"])
@@ -782,44 +791,49 @@ def decide_claim(claim_id):
     link = url_for("item_detail", item_id=item["id"])
 
     if action == "accept":
-        already = conn.execute(
-            "SELECT 1 FROM claims WHERE item_id = ? AND status = 'accepted'",
-            (item["id"],),
-        ).fetchone()
+        already = None
+        if item["status"] != "seen":
+            already = conn.execute(
+                "SELECT 1 FROM claims WHERE item_id = ? AND status = 'accepted'",
+                (item["id"],),
+            ).fetchone()
         if already:
             conn.close()
             flash("You have already accepted a claim for this item.")
             return redirect(link)
-        others = conn.execute(
-            "SELECT claimant_id FROM claims "
-            "WHERE item_id = ? AND id != ? AND status = 'pending'",
-            (item["id"], claim_id),
-        ).fetchall()
+        others = []
+        if item["status"] != "seen":
+            others = conn.execute(
+                "SELECT claimant_id FROM claims "
+                "WHERE item_id = ? AND id != ? AND status = 'pending'",
+                (item["id"], claim_id),
+            ).fetchall()
         conn.execute(
             "UPDATE claims SET status = 'accepted', decided_at = CURRENT_TIMESTAMP WHERE id = ?",
             (claim_id,),
         )
-        conn.execute(
-            "UPDATE claims SET status = 'rejected', decided_at = CURRENT_TIMESTAMP "
-            "WHERE item_id = ? AND id != ? AND status = 'pending'",
-            (item["id"], claim_id),
-        )
+        if item["status"] != "seen":
+            conn.execute(
+                "UPDATE claims SET status = 'rejected', decided_at = CURRENT_TIMESTAMP "
+                "WHERE item_id = ? AND id != ? AND status = 'pending'",
+                (item["id"], claim_id),
+            )
         conn.execute(
             "INSERT INTO events (item_id, claim_id, user_id, action) VALUES (?, ?, ?, ?)",
             (item["id"], claim_id, session["user_id"], "claim_accepted"),
         )
-        notify(
-            conn, claim["claimant_id"],
-            f'Your claim on "{item["title"]}" was accepted. The finder will arrange the handover.',
-            link,
-        )
+        if item["status"] == "seen":
+            accept_note = f'Your request about the sighting "{item["title"]}" was accepted. You can chat now.'
+        else:
+            accept_note = f'Your claim on "{item["title"]}" was accepted. The finder will arrange the handover.'
+        notify(conn, claim["claimant_id"], accept_note, link)
         for o in others:
             notify(
                 conn, o["claimant_id"],
                 f'Your claim on "{item["title"]}" was not accepted.',
                 link,
             )
-        flash("Claim accepted. Other pending claims were rejected.")
+        flash("Accepted. You can chat now." if item["status"] == "seen" else "Claim accepted. Other pending claims were rejected.")
     else:
         conn.execute(
             "UPDATE claims SET status = 'rejected', decided_at = CURRENT_TIMESTAMP WHERE id = ?",
@@ -831,10 +845,11 @@ def decide_claim(claim_id):
         )
         notify(
             conn, claim["claimant_id"],
-            f'Your claim on "{item["title"]}" was not accepted.',
+            f'Your request about "{item["title"]}" was not accepted.' if item["status"] == "seen"
+            else f'Your claim on "{item["title"]}" was not accepted.',
             link,
         )
-        flash("Claim rejected.")
+        flash("Request declined." if item["status"] == "seen" else "Claim rejected.")
 
     conn.commit()
     conn.close()
@@ -1193,6 +1208,8 @@ def admin_activity():
 
 
 def notify(conn, user_id, message, link=None):
+    if user_id is None:
+        return
     conn.execute(
         "INSERT INTO notifications (user_id, message, link) VALUES (?, ?, ?)",
         (user_id, message, link),

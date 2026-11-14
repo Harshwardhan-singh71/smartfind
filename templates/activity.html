@@ -60,7 +60,7 @@
                     <span class="meta">{{ r.created_at }}</span>
                 </div>
                 <h3>{{ r.title }}</h3>
-                <p class="meta">Claimed by {{ r.claimant_name }}</p>
+                <p class="meta">Claimed by {{ 'Anonymous' if r.anonymous else r.claimant_name }}</p>
                 <p>{{ (r.answer or '')|truncate(100) }}</p>
                 <span class="view-more">{% if r.claim_status == 'pending' %}Review claim →{% else %}View item →{% endif %}</span>
             </div>
