@@ -61,6 +61,7 @@
         <a class="tab {% if status == 'found' %}active{% endif %}" href="/?status=found&q={{ q }}">Found</a>
         <a class="tab {% if status == 'seen' %}active{% endif %}" href="/?status=seen&q={{ q }}">Seen</a>
         <a class="tab {% if status == 'resolved' %}active{% endif %}" href="/?status=resolved&q={{ q }}">Resolved</a>
+        <a class="tab {% if status == 'old' %}active{% endif %}" href="/?status=old&q={{ q }}">Old</a>
     </div>
 
     {% for item in items %}

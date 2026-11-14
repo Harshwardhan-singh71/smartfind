@@ -4,7 +4,7 @@ import sqlite3
 import secrets
 import time
 import uuid
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, abort, jsonify, send_from_directory
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -80,6 +80,29 @@ def get_db():
     return conn
 
 
+# How long a post stays on the home page and in matching. After this it moves to the
+# "Old" tab. The poster can keep it active with one click.
+EXPIRE_DAYS = {"lost": 45, "found": 60, "seen": 14}
+FRESH_SQL = (
+    "date_reported >= CASE status "
+    f"WHEN 'seen' THEN datetime('now', '-{EXPIRE_DAYS['seen']} days') "
+    f"WHEN 'lost' THEN datetime('now', '-{EXPIRE_DAYS['lost']} days') "
+    f"ELSE datetime('now', '-{EXPIRE_DAYS['found']} days') END"
+)
+
+
+def is_old_post(item):
+    """True when an unresolved post is past its time limit."""
+    if item["resolved"]:
+        return False
+    try:
+        posted = datetime.strptime(item["date_reported"][:19], "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return False
+    limit = EXPIRE_DAYS.get(item["status"], 60)
+    return datetime.utcnow() - posted > timedelta(days=limit)
+
+
 @app.route("/")
 def home():
     q = request.args.get("q", "").strip()
@@ -96,9 +119,12 @@ def home():
     if status == "resolved":
         # Resolved tab: only items that were returned
         query += " AND resolved = 1"
+    elif status == "old":
+        # Old tab: not returned, but past the time limit
+        query += f" AND (resolved = 0 OR resolved IS NULL) AND NOT ({FRESH_SQL})"
     else:
-        # All / Lost / Found / Seen: only items that are still active
-        query += " AND (resolved = 0 OR resolved IS NULL)"
+        # All / Lost / Found / Seen: only items that are still active and recent
+        query += f" AND (resolved = 0 OR resolved IS NULL) AND {FRESH_SQL}"
         if status in ("lost", "found", "seen"):
             query += " AND status = ?"
             params.append(status)
@@ -156,7 +182,7 @@ def notify_matches(conn, item_id):
     placeholders = ",".join("?" * len(wanted))
     candidates = conn.execute(
         f"SELECT * FROM items WHERE status IN ({placeholders}) "
-        "AND (resolved = 0 OR resolved IS NULL) AND user_id != ?",
+        f"AND (resolved = 0 OR resolved IS NULL) AND {FRESH_SQL} AND user_id != ?",
         (*wanted, item["user_id"]),
     ).fetchall()
 
@@ -411,7 +437,7 @@ def matches(item_id):
     placeholders = ",".join("?" * len(wanted))
     candidates = conn.execute(
         f"SELECT * FROM items WHERE status IN ({placeholders}) "
-        "AND (resolved = 0 OR resolved IS NULL)",
+        f"AND (resolved = 0 OR resolved IS NULL) AND {FRESH_SQL}",
         wanted,
     ).fetchall()
     conn.close()
@@ -489,6 +515,24 @@ def delete_item(item_id):
     return redirect(url_for("home"))
 
 
+@app.route("/renew/<int:item_id>", methods=["POST"])
+def renew_item(item_id):
+    conn = get_db()
+    item = conn.execute("SELECT user_id, resolved FROM items WHERE id = ?", (item_id,)).fetchone()
+    if item is None:
+        conn.close()
+        abort(404)
+    if item["user_id"] != session["user_id"] and not is_admin_user():
+        conn.close()
+        abort(403)
+    if not item["resolved"]:
+        conn.execute("UPDATE items SET date_reported = CURRENT_TIMESTAMP WHERE id = ?", (item_id,))
+        conn.commit()
+        flash("Your post is active again.")
+    conn.close()
+    return redirect(url_for("item_detail", item_id=item_id))
+
+
 @app.route("/item/<int:item_id>")
 def item_detail(item_id):
     conn = get_db()
@@ -530,6 +574,7 @@ def item_detail(item_id):
     return render_template(
         "item.html", item=item, is_owner=is_owner, claims=claims,
         my_claim=my_claim, has_alert=has_alert, details=details,
+        is_old=is_old_post(item), expire_days=EXPIRE_DAYS,
     )
 
 

@@ -37,7 +37,29 @@
         {% if item.resolved %}
             <p><b>✔ Returned / resolved</b></p>
         {% endif %}
+        {% if is_old %}
+            <p class="meta">⏳ This post is old. It no longer appears on the home page or in new match alerts.</p>
+        {% endif %}
     </div>
+
+    {% if is_old and (is_owner or is_admin) %}
+    <div class="card">
+        <p>
+            {% if item.status == 'found' %}
+                The {{ expire_days.found }}-day holding period for this found item is over.
+                If nobody has claimed it, hand it to the security desk or the university lost-and-found,
+                then mark it as returned.
+            {% elif item.status == 'lost' %}
+                Still looking for it? Keep this post active so it shows up and gets match alerts again.
+            {% else %}
+                Is this sighting still useful? Keep it active, or leave it to expire.
+            {% endif %}
+        </p>
+        <form method="POST" action="/renew/{{ item.id }}">
+            <button type="submit" class="btn-outline">Keep this post active</button>
+        </form>
+    </div>
+    {% endif %}
 
     {% if is_owner or is_admin %}
     <div class="card">
