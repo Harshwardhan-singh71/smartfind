@@ -52,7 +52,7 @@
                         <a class="bell-foot" href="/notifications">See all notifications →</a>
                     </div>
                 </div>
-                {% if is_admin %}<a href="/admin/users">Manage users</a><a href="/admin/activity">Activity log</a><span class="admin-pill">ADMIN</span>{% endif %}
+                {% if is_admin %}<a href="/admin/users">Manage users</a><a href="/admin/activity">Activity log</a><a href="/admin/reports">Reports{% if open_reports %} ({{ open_reports }}){% endif %}</a><span class="admin-pill">ADMIN</span>{% endif %}
                 <a class="nav-user" href="/profile" title="My profile">Hi, {{ session.user_name }}</a>
                 <a href="/logout">Logout</a>
             {% else %}

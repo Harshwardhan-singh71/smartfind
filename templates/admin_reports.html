@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Reported posts - SmartFind{% endblock %}
+{% block content %}
+    <h1 class="page-title">Reported posts</h1>
+
+    <div class="tabs">
+        <a class="tab {% if view == 'open' %}active{% endif %}" href="/admin/reports?view=open">Open</a>
+        <a class="tab {% if view == 'dismissed' %}active{% endif %}" href="/admin/reports?view=dismissed">Dismissed</a>
+        <a class="tab {% if view == 'all' %}active{% endif %}" href="/admin/reports?view=all">All</a>
+    </div>
+
+    {% for p in posts %}
+        <div class="card">
+            <div class="card-top">
+                <span class="tag {{ p.item.item_status }}">{{ p.item.item_status|upper }}</span>
+                <span class="meta">{{ p.reports|length }} report{{ 's' if p.reports|length != 1 }}</span>
+            </div>
+            <h3>{{ p.item.title }}</h3>
+            <p class="meta">Posted by {{ p.item.poster_name or 'unknown' }}</p>
+            {% for r in p.reports %}
+                <div style="border-top: 1px solid var(--border); padding: 8px 0;">
+                    <p><b>{{ reasons.get(r.reason, r.reason) }}</b>
+                       <span class="meta">&nbsp;· by {{ r.reporter_name }} · {{ r.created_at }}{% if r.status != 'open' %} · {{ r.status }}{% endif %}</span></p>
+                    {% if r.note %}<p>{{ r.note }}</p>{% endif %}
+                </div>
+            {% endfor %}
+            <div style="margin-top: 8px;">
+                <a class="btn btn-outline" href="/item/{{ p.item.item_id }}">View post</a>
+                {% if view != 'dismissed' %}
+                <form method="POST" action="/admin/reports/{{ p.item.item_id }}/dismiss" style="display: inline;">
+                    <button type="submit" class="btn-outline">Dismiss reports</button>
+                </form>
+                {% endif %}
+                <form method="POST" action="/delete/{{ p.item.item_id }}" style="display: inline;"
+                      onsubmit="return confirm('Delete this post permanently?');">
+                    <button type="submit" class="btn-danger">Delete post</button>
+                </form>
+            </div>
+        </div>
+    {% else %}
+        <p class="empty">No reports here. 🎉</p>
+    {% endfor %}
+{% endblock %}

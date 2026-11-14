@@ -451,7 +451,15 @@ def is_admin_user():
 
 @app.context_processor
 def inject_admin():
-    return {"is_admin": is_admin_user()}
+    admin = is_admin_user()
+    open_reports = 0
+    if admin:
+        conn = get_db()
+        open_reports = conn.execute(
+            "SELECT COUNT(DISTINCT item_id) FROM post_reports WHERE status = 'open'"
+        ).fetchone()[0]
+        conn.close()
+    return {"is_admin": admin, "open_reports": open_reports}
 
 
 @app.route("/delete/<int:item_id>", methods=["POST"])
@@ -466,6 +474,7 @@ def delete_item(item_id):
     ).fetchone()
     if row:
         log_event(conn, item_id, "item_deleted", session["user_id"], detail=row["title"])
+    conn.execute("DELETE FROM post_reports WHERE item_id = ?", (item_id,))
     conn.execute("DELETE FROM items WHERE id = ?", (item_id,))
     conn.commit()
     conn.close()
@@ -1315,6 +1324,56 @@ def report_post(item_id):
     else:
         flash("You have already reported this post.")
     return redirect(url_for("item_detail", item_id=item_id))
+
+
+@app.route("/admin/reports")
+def admin_reports():
+    if not is_admin_user():
+        abort(403)
+    view = request.args.get("view", "open")
+    if view not in ("open", "dismissed", "all"):
+        view = "open"
+
+    conn = get_db()
+    where = "" if view == "all" else "WHERE post_reports.status = ?"
+    params = [] if view == "all" else [view]
+    rows = conn.execute(
+        "SELECT post_reports.id, post_reports.item_id, post_reports.reason, "
+        "post_reports.note, post_reports.status, post_reports.created_at, "
+        "users.name AS reporter_name, items.title, items.status AS item_status, "
+        "items.image, items.user_id AS poster_id, poster.name AS poster_name "
+        "FROM post_reports "
+        "JOIN items ON items.id = post_reports.item_id "
+        "JOIN users ON users.id = post_reports.reporter_id "
+        "LEFT JOIN users AS poster ON poster.id = items.user_id "
+        f"{where} ORDER BY post_reports.id DESC",
+        params,
+    ).fetchall()
+    conn.close()
+
+    posts = {}
+    for r in rows:
+        entry = posts.setdefault(r["item_id"], {"item": r, "reports": []})
+        entry["reports"].append(r)
+    return render_template(
+        "admin_reports.html", posts=list(posts.values()), view=view,
+        reasons=REPORT_REASONS,
+    )
+
+
+@app.route("/admin/reports/<int:item_id>/dismiss", methods=["POST"])
+def admin_reports_dismiss(item_id):
+    if not is_admin_user():
+        abort(403)
+    conn = get_db()
+    conn.execute(
+        "UPDATE post_reports SET status = 'dismissed' WHERE item_id = ? AND status = 'open'",
+        (item_id,),
+    )
+    conn.commit()
+    conn.close()
+    flash("Reports dismissed. The post stays up.")
+    return redirect(url_for("admin_reports"))
 
 
 if __name__ == "__main__":
