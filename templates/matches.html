@@ -16,9 +16,7 @@
         <p class="meta">📍 {{ item.location }} &nbsp;·&nbsp; 🏷️ {{ item.category }}</p>
     </div>
 
-    <h2>Suggested matches</h2>
-    {% if results %}
-        {% for match, percent in results %}
+    {% macro match_card(match, percent) %}
         <a class="card-link" href="/item/{{ match.id }}?from={{ item.id }}">
             <div class="card">
                 <div class="card-top">
@@ -31,12 +29,28 @@
                 {% endif %}
                 <p>{{ (match.description or '')|truncate(100) }}</p>
                 <p class="meta">📍 {{ match.location }} &nbsp;·&nbsp; 🏷️ {{ match.category }}</p>
+                {% if reasons[match.id] %}
+                    <p class="meta">💡 Why: {{ reasons[match.id]|join(' · ') }}</p>
+                {% endif %}
                 <span class="view-more">View details →</span>
             </div>
         </a>
-        {% endfor %}
+    {% endmacro %}
+
+    {% set strong = results|selectattr('1', 'ge', strong_from)|list %}
+    {% set weak = results|selectattr('1', 'lt', strong_from)|list %}
+
+    <h2>Strong matches</h2>
+    {% if strong %}
+        {% for match, percent in strong %}{{ match_card(match, percent) }}{% endfor %}
     {% else %}
-        <p class="empty">No likely matches yet. Check back after more items are reported.</p>
+        <p class="empty">No strong matches yet. Check back after more items are reported.</p>
+    {% endif %}
+
+    {% if weak %}
+        <h2>Weaker possibilities</h2>
+        <p class="meta">These are less likely, but worth a look if you can't find yours above.</p>
+        {% for match, percent in weak %}{{ match_card(match, percent) }}{% endfor %}
     {% endif %}
     <p><a href="/item/{{ item.id }}">← Back to this item</a></p>
 {% endblock %}

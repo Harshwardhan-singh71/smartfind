@@ -1,4 +1,6 @@
-from sklearn.feature_extraction.text import TfidfVectorizer
+import re
+
+from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS, TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # How the final score is built (adds up to 1.0)
@@ -62,3 +64,25 @@ def find_matches(target, candidates, top_n=3, min_score=0.12):
 
     results.sort(key=lambda pair: pair[1], reverse=True)
     return results[:top_n]
+
+
+def keywords(item):
+    """The meaningful words in an item's title and description."""
+    text = f"{field(item, 'title')} {field(item, 'description')}".lower()
+    words = re.findall(r"[a-z0-9]+", text)
+    return {w for w in words if len(w) > 2 and w not in ENGLISH_STOP_WORDS}
+
+
+def why_matched(target, candidate, max_words=4):
+    """Short plain-language reasons why two posts look alike (for the user to read)."""
+    reasons = []
+    category = field(target, "category")
+    if category and category.lower() == field(candidate, "category").lower():
+        reasons.append(f"same category ({category})")
+    place = field(target, "place")
+    if place and place.lower() == field(candidate, "place").lower():
+        reasons.append(f"same place ({place})")
+    shared = sorted(keywords(target) & keywords(candidate))
+    if shared:
+        reasons.append("similar words: " + ", ".join(shared[:max_words]))
+    return reasons

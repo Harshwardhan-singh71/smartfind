@@ -10,7 +10,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 
-from matcher import find_matches
+from matcher import find_matches, why_matched
 
 app = Flask(__name__)
 # Secret key comes from an environment variable. The fallback is only for local testing.
@@ -168,6 +168,7 @@ def dates_plausible(lost_item, found_item):
     return True
 
 
+STRONG_MATCH_PERCENT = 60   # at or above this the matches page calls it a strong match
 MATCH_ALERT_MIN = 40   # only alert for matches of at least this percent
 MATCH_ALERT_MAX = 3    # at most this many alerts per new post
 
@@ -236,10 +237,12 @@ def notify_matches(conn, item_id):
     else:
         verb = "found" if item["status"] == "found" else "saw"
         for other, percent, lost_item, found_item in good:
+            why = why_matched(lost_item, item)
+            why_text = f", {', '.join(why[:2])}" if why else ""
             notify(
                 conn, lost_item["user_id"],
                 f'Possible match ({percent}%) for your lost "{lost_item["title"]}": '
-                f'someone {verb} "{item["title"]}". Is this yours?',
+                f'someone {verb} "{item["title"]}"{why_text}. Is this yours?',
                 url_for("item_detail", item_id=item["id"]),
             )
 
@@ -442,8 +445,12 @@ def matches(item_id):
     ).fetchall()
     conn.close()
 
-    results = find_matches(item, candidates)
-    return render_template("matches.html", item=item, results=results)
+    results = find_matches(item, candidates, top_n=8)
+    reasons = {match["id"]: why_matched(item, match) for match, _ in results}
+    return render_template(
+        "matches.html", item=item, results=results, reasons=reasons,
+        strong_from=STRONG_MATCH_PERCENT,
+    )
 
 
 @app.route("/my-posts")
