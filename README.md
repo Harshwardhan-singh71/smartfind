@@ -40,6 +40,7 @@ A centralized website for Dayananda Sagar University where students and staff re
    python add_phone_calls.py
    python add_item_details.py
    python add_post_reports.py
+   python add_ai_usage.py
    ```
 3. Create a file named `admin.txt` containing the admin's email (one line). This file is never committed.
 4. Optional: set a real secret key before deploying: `SMARTFIND_SECRET_KEY=<long random text>`. When serving over HTTPS also set `SMARTFIND_HTTPS=1`.
