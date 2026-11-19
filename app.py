@@ -284,6 +284,7 @@ def report():
                 extra_details.append((label, value))
         extra_details = extra_details[:5]
 
+        title = request.form["title"].strip()
         conn = get_db()
         cur = conn.execute(
             "INSERT INTO items (title, description, category, location, status, "
@@ -291,7 +292,7 @@ def report():
             "event_date, event_time, image, private_question, at_security) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                request.form["title"],
+                title,
                 request.form["description"],
                 request.form["category"],
                 location,
@@ -314,7 +315,7 @@ def report():
                 (cur.lastrowid, label, value),
             )
         log_event(conn, cur.lastrowid, "item_posted", session["user_id"],
-                  detail=request.form["title"])
+                  detail=title)
         notify_matches(conn, cur.lastrowid)
         conn.commit()
         conn.close()
