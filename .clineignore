@@ -1,0 +1,16 @@
+venv/
+.venv/
+.git/
+__pycache__/
+static/uploads/
+chat_uploads/
+smartfind.db
+admin.txt
+.env
+*.zip
+matcher_backup.txt
+allowed_emails.txt
+node_modules/
+_old/
+*.db
+smartfind_data.zip
