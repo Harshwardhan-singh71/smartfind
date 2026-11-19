@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from matcher import find_matches, why_matched
 
 app = Flask(__name__)
+import ai
 # Secret key comes from an environment variable. The fallback is only for local testing.
 app.secret_key = os.environ.get("SMARTFIND_SECRET_KEY", "dev-only-change-me")
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=60)   # stay logged in
@@ -321,7 +322,215 @@ def report():
     return render_template("report.html")
 
 
-@app.route("/register")
+# ---------- AI Feature: Assistant Bot (Report Page Helper) ----------
+
+@app.route("/ai/assist", methods=["POST"])
+def ai_assist():
+    """Instant local parser for the report form. Zero latency, zero API errors."""
+    if "user_id" not in session:
+        return jsonify({"error": "Login required"}), 401
+
+    text = request.json.get("text", "").strip()
+    if not text:
+        return jsonify({"error": "No text provided."}), 400
+
+    lower_text = text.lower()
+    draft = {
+        "status": "lost",
+        "title": "",
+        "category": "Other",
+        "place": "",
+        "place_details": "",
+        "event_date": "",
+        "event_time": "",
+        "private_question": "",
+        "details": [],
+        "description": ""
+    }
+
+    # 1. Smart Status Detection
+    if any(w in lower_text for w in ["lost", "looking for", "missed", "missing"]):
+        draft["status"] = "lost"
+    elif any(w in lower_text for w in ["found", "picked up", "has", "have"]):
+        draft["status"] = "found"
+    elif any(w in lower_text for w in ["seen", "saw", "spotted"]):
+        draft["status"] = "seen"
+
+    # 2. Campus Place Detection (with place_details extraction)
+    places = ['Library', 'Mess', 'Canteen', 'Cricket Ground', 'Parking', 'Classroom', 'Lab', 'Hostel', 'Auditorium', 'Sports Complex', 'Lecture Hall', 'Professor Cabin', 'Bus Stop', 'Academic Block']
+    for p in places:
+        if p.lower() in lower_text:
+            draft["place"] = p
+            # Extract place details - text after the place name
+            idx2 = lower_text.find(p.lower())
+            if idx2 != -1:
+                after_place = text[idx2 + len(p):].strip()
+                # Remove leading prepositions
+                after_place = re.sub(r"^(at|in|near|by|around|close to|next to)\s+", "", after_place, flags=re.IGNORECASE)
+                # Take first sentence or up to 100 chars
+                place_details_match = re.match(r"([^.!?]{1,100})", after_place)
+                if place_details_match:
+                    draft["place_details"] = place_details_match.group(1).strip().rstrip(".,;")
+            break
+
+    # 3. Category Detection
+    categories = ['Wallet', 'Bottle', 'Electronics', 'Books', 'ID Card', 'Keys', 'Clothing']
+    for cat in categories:
+        if cat.lower() in lower_text:
+            draft["category"] = cat
+            break
+
+    # 4. Date/Time Detection
+    # Relative dates
+    today = date.today()
+    if "today" in lower_text:
+        draft["event_date"] = today.strftime("%Y-%m-%d")
+    elif "yesterday" in lower_text:
+        draft["event_date"] = (today - timedelta(days=1)).strftime("%Y-%m-%d")
+    elif "day before yesterday" in lower_text:
+        draft["event_date"] = (today - timedelta(days=2)).strftime("%Y-%m-%d")
+    # Explicit date patterns (dd/mm, mm/dd, etc.)
+    date_match = re.search(r"\b(\d{1,2})[/-](\d{1,2})(?:[/-](\d{2,4}))?\b", text)
+    if date_match and not draft["event_date"]:
+        day, month = int(date_match.group(1)), int(date_match.group(2))
+        year = int(date_match.group(3)) if date_match.group(3) else today.year
+        if year < 100:
+            year += 2000
+        try:
+            draft["event_date"] = f"{year:04d}-{month:02d}-{day:02d}"
+        except ValueError:
+            pass
+
+    # Time patterns (e.g., "3pm", "15:30", "this morning", "around 5pm")
+    time_match = re.search(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", lower_text)
+    if time_match:
+        hour = int(time_match.group(1))
+        minute = int(time_match.group(2)) if time_match.group(2) else 0
+        ampm = time_match.group(3)
+        if ampm == "pm" and hour < 12:
+            hour += 12
+        elif ampm == "am" and hour == 12:
+            hour = 0
+        draft["event_time"] = f"{hour:02d}:{minute:02d}"
+    elif "morning" in lower_text:
+        draft["event_time"] = "09:00"
+    elif "afternoon" in lower_text:
+        draft["event_time"] = "14:00"
+    elif "evening" in lower_text:
+        draft["event_time"] = "18:00"
+    elif "night" in lower_text:
+        draft["event_time"] = "21:00"
+
+    # 5. Private question detection (for "found" items)
+    if draft["status"] == "found":
+        # Look for question-like patterns
+        q_match = re.search(r"[?]|\bwhat\b|\bwhich\b|\bwhere\b|\bdescribe\b", lower_text)
+        if q_match:
+            # Extract the sentence with the question
+            sentences = re.split(r"[.!?]", text)
+            for s in sentences:
+                if "?" in s or re.search(r"\bwhat\b|\bwhich\b|\bwhere\b|\bdescribe\b", s.lower()):
+                    draft["private_question"] = s.strip()
+                    break
+
+    # 6. High-Performance Title Extraction
+    # We strip out "noise" words to find the actual object
+    noise = r"\b(i|my|the|a|an|lost|found|seen|saw|spotted|at|in|near|on|today|yesterday|morning|afternoon|evening|looking|for|picked|up)\b"
+    # Also strip out the place name if we found it
+    clean_title = re.sub(noise, "", lower_text)
+    if draft["place"]:
+        clean_title = re.sub(rf"\b{draft['place'].lower()}\b", "", clean_title)
+    
+    # Take the remaining meaningful words
+    title_parts = [w.strip() for w in clean_title.split() if len(w) > 1]
+    if title_parts:
+        draft["title"] = " ".join(title_parts).capitalize()
+    else:
+        # Fallback to the original text if parsing failed
+        draft["title"] = text.capitalize()
+
+    # 7. Extract detail pairs (label/value) from descriptive phrases
+    # Common patterns: "black leather wallet", "brand is Nike", "red color", etc.
+    detail_labels = ["Brand", "Colour", "Size", "Model", "Sticker / marks", "Contents"]
+    found_labels = set()
+    
+    # Pattern: "label is/value" or "label: value"
+    for label in detail_labels:
+        label_lower = label.lower().replace("/", "")
+        pattern = rf"\b{re.escape(label_lower)}\b\s*(?:is|=|:)\s*([^,.!?]+)"
+        match = re.search(pattern, lower_text)
+        if match:
+            value = match.group(1).strip().rstrip(".,;")
+            if value and len(value) > 1:
+                draft["details"].append({"label": label, "value": value})
+                found_labels.add(label_lower)
+
+    # Pattern: adjective + noun (e.g., "black wallet", "red bottle")
+    color_match = re.search(r"\b(black|white|red|blue|green|yellow|pink|purple|orange|brown|grey|gray|silver|gold)\b", lower_text)
+    if color_match and "Colour" not in found_labels:
+        draft["details"].append({"label": "Colour", "value": color_match.group(1).capitalize()})
+
+    # Limit to 5 details
+    draft["details"] = draft["details"][:5]
+
+    # 8. Description (everything they typed is a good start for description)
+    draft["description"] = text
+
+    return jsonify({
+        "success": True,
+        "draft": draft,
+        "uses_left": "Unlimited (Local Mode)"
+    })
+
+# ---------- AI/Proactive Feature: Live Match Preview ----------
+
+@app.route("/api/match-preview", methods=["POST"])
+def ai_match_preview():
+    """Takes unsaved form data and returns top matching items from the database.
+    This helps users see if their item is already reported while they are still typing."""
+    if "user_id" not in session:
+        return jsonify([])
+
+    data = request.json
+    target = {
+        "status": data.get("status", "lost"),
+        "title": data.get("title", ""),
+        "description": data.get("description", ""),
+        "category": data.get("category", "Other"),
+        "place": data.get("place", ""),
+        "event_date": "" # Date is less critical for a quick preview
+    }
+
+    if not target["title"] and not target["description"]:
+        return jsonify([])
+
+    conn = get_db()
+    # Find items of the opposite status
+    wanted = ("found", "seen") if target["status"] == "lost" else ("lost",)
+    placeholders = ",".join("?" * len(wanted))
+    candidates = conn.execute(
+        f"SELECT * FROM items WHERE status IN ({placeholders}) "
+        "AND (resolved = 0 OR resolved IS NULL)",
+        wanted
+    ).fetchall()
+    conn.close()
+
+    # Reuse your existing matcher.py logic
+    from matcher import find_matches
+    results = find_matches(target, candidates, top_n=3)
+    
+    # Format for JSON
+    out = []
+    for item, score in results:
+        out.append({
+            "id": item["id"],
+            "title": item["title"],
+            "place": item["place"] or item["location"],
+            "image": item["image"],
+            "score": score,
+            "status": item["status"]
+        })
+    return jsonify(out)@app.route("/register")
 def register():
     flash("Accounts are created by the admin. Please log in with the email and "
           "temporary password you were sent.")

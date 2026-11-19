@@ -137,6 +137,9 @@ def ask_text(prompt, json_mode=False):
         except Exception as error:   # slow, offline, bad key, quota... never crash the site
             last_error = f"{type(error).__name__}: {str(error)[:300]}"
             message = str(error).lower()
+            if ("429" in message or "quota" in message or "exhausted" in message) and attempt == 1:
+                time.sleep(5)
+                continue
             if "429" in message or "quota" in message or "exhausted" in message:
                 _paused_until = time.time() + PAUSE_SECONDS
                 return None

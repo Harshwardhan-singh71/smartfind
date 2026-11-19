@@ -4,6 +4,19 @@
     <div class="card form-card">
         <h1 class="page-title">Report an Item</h1>
         <p class="subtitle">Start with a photo. Only the name and place are required.</p>
+        <!-- AI Assistant Bot -->
+        <div class="ai-box" style="background: var(--bg-card); border: 1px dashed #ffa062; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <label style="color: #ff5e2b; font-weight: bold; display: flex; align-items: center; gap: 6px;">
+                ✨ AI Quick-Fill
+            </label>
+            <p class="meta" style="margin-bottom: 10px;">Just tell us what happened and we'll draft the form for you.</p>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="ai-input" placeholder="e.g. I lost my black leather wallet in the Library today morning" style="flex: 1; margin: 0;">
+                <button type="button" id="ai-btn" class="btn-outline" style="white-space: nowrap;">Fill Form</button>
+            </div>
+            <p id="ai-status" class="meta" style="margin-top: 8px; display: none;"></p>
+        </div>
+
         <form method="POST" enctype="multipart/form-data">
 
            <label>Photo (optional: take one or choose from gallery. If you only saw the item, you can skip it)</label>
@@ -130,6 +143,17 @@
                 </p>
             </div>
 
+            <!-- Live Match Preview Box (Hidden by default) -->
+            <div id="preview-box" style="display: none; background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 8px; padding: 15px; margin: 20px 0;">
+                <h4 style="margin-top: 0; color: #1e1b4b; display: flex; align-items: center; gap: 6px;">
+                    🔍 Is this what you're looking for?
+                </h4>
+                <p class="meta">We found some similar posts that might match yours.</p>
+                <div id="preview-list" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+
+            <p id="safety-warning" class="meta" style="color: #dc2626; display: none; font-weight: 600; margin-bottom: 10px;"></p>
+
             <button type="submit" class="btn-full">Submit</button>
         </form>
     </div>
@@ -142,8 +166,134 @@
         var t = new URLSearchParams(window.location.search).get("type");
         if (t === "lost" || t === "found" || t === "seen") {
             sel.value = t;
+
+            // 1. Auto-set Date and Time to Today/Now
+            var dateInput = document.getElementsByName("event_date")[0];
+            var timeInput = document.getElementsByName("event_time")[0];
+            if (dateInput && !dateInput.value) {
+                dateInput.valueAsDate = new Date();
+            }
+            if (timeInput && !timeInput.value) {
+                var now = new Date();
+                var hours = String(now.getHours()).padStart(2, '0');
+                var minutes = String(now.getMinutes()).padStart(2, '0');
+                timeInput.value = hours + ":" + minutes;
+            }
+
+            // 2. Safety Warning Filter
+            var descInput = document.getElementsByName("description")[0];
+            var safetyWarning = document.getElementById("safety-warning");
+            if (descInput) {
+                descInput.addEventListener("input", function() {
+                    var val = descInput.value;
+                    // Check for phone numbers or emails
+                    if (/(\d{10}|\b[\w\.-]+@[\w\.-]+\.\w{2,4}\b)/.test(val)) {
+                        safetyWarning.textContent = "⚠️ Safety Note: Please avoid typing real phone numbers or emails here. Use the private profile settings for contact info.";
+                        safetyWarning.style.display = "block";
+                    } else {
+                        safetyWarning.style.display = "none";
+                    }
+                });
+            }
+
+            // 3. Proactive Live Match Preview
+            function checkLiveMatches() {
+                var title = document.getElementsByName("title")[0].value;
+                var place = document.getElementsByName("place")[0].value;
+                var status = sel.value;
+                var desc = descInput ? descInput.value : "";
+                
+                if (title.length < 3) return;
+
+                fetch("/api/match-preview", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({title: title, place: place, status: status, description: desc})
+                }).then(function(r) { return r.json(); })
+                .then(function(items) {
+                    var box = document.getElementById("preview-box");
+                    var list = document.getElementById("preview-list");
+                    list.innerHTML = "";
+
+                    if (items.length > 0) {
+                        items.forEach(function(item) {
+                            var div = document.createElement("div");
+                            div.style.cssText = "background: white; padding: 10px; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #e2e8f0;";
+                            div.innerHTML = '<div>' +
+                                '<strong>' + item.title + '</strong> <span class="meta">(' + item.status + ' at ' + item.place + ')</span>' +
+                                '</div>' +
+                                '<a href="/item/' + item.id + '" target="_blank" class="btn-outline" style="padding: 4px 8px; font-size: 12px;">View Item</a>';
+                            list.appendChild(div);
+                        });
+                        box.style.display = "block";
+                    } else {
+                        box.style.display = "none";
+                    }
+                });
+            }
+
+            // Trigger live match when title or place changes
+            document.getElementsByName("title")[0].addEventListener("change", checkLiveMatches);
+            document.getElementsByName("place")[0].addEventListener("change", checkLiveMatches);
+
         }
         sel.addEventListener("change", toggle);
+
+            var aiBtn = document.getElementById("ai-btn");
+            var aiInput = document.getElementById("ai-input");
+            var aiStatus = document.getElementById("ai-status");
+            aiBtn.addEventListener("click", function () {
+                var text = aiInput.value.trim();
+                if (!text) return;
+                aiStatus.textContent = "AI is thinking...";
+                aiStatus.style.display = "block";
+                aiStatus.style.color = "#ffa062";
+                fetch("/ai/assist", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({text: text})
+                }).then(function (r) { return r.json(); })
+                .then(function (res) {
+                    if (res.success) {
+                        aiStatus.textContent = "Draft ready!";
+                        aiStatus.style.color = "green";
+                        if (res.draft.status) sel.value = res.draft.status;
+                        if (res.draft.title) document.getElementsByName("title")[0].value = res.draft.title;
+                        if (res.draft.category) document.getElementsByName("category")[0].value = res.draft.category;
+                        if (res.draft.place) document.getElementsByName("place")[0].value = res.draft.place;
+                        if (res.draft.place_details) document.getElementsByName("place_details")[0].value = res.draft.place_details;
+                        if (res.draft.event_date) document.getElementsByName("event_date")[0].value = res.draft.event_date;
+                        if (res.draft.event_time) document.getElementsByName("event_time")[0].value = res.draft.event_time;
+                        if (res.draft.private_question) document.getElementsByName("private_question")[0].value = res.draft.private_question;
+                        if (res.draft.description) document.getElementsByName("description")[0].value = res.draft.description;
+                        // Fill detail rows
+                        if (res.draft.details && res.draft.details.length > 0) {
+                            var rows = document.getElementById("detail-rows");
+                            var addBtn = document.getElementById("add-detail");
+                            res.draft.details.forEach(function(detail) {
+                                if (rows.children.length >= 5) return;
+                                var div = document.createElement("div");
+                                div.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
+                                div.innerHTML =
+                                    '<input type="text" name="detail_label" list="detail-labels" maxlength="40" placeholder="Label (e.g. Brand)" style="flex: 1;" value="' + (detail.label || "") + '">' +
+                                    '<input type="text" name="detail_value" maxlength="200" placeholder="Detail (e.g. Boat)" style="flex: 2;" value="' + (detail.value || "") + '">' +
+                                    '<button type="button" class="btn-outline remove-detail">✕</button>';
+                                rows.appendChild(div);
+                            });
+                            if (rows.children.length >= 5) addBtn.style.display = "none";
+                        }
+                        toggle();
+                        checkLiveMatches(); // Trigger a match check immediately
+                    } else {
+                        aiStatus.textContent = res.error || "AI error.";
+                        aiStatus.style.color = "red";
+                    }
+                }).catch(function () {
+                    aiStatus.textContent = "AI connection error.";
+                    aiStatus.style.color = "red";
+                });
+            });
+
         toggle();
 
         var photoInput = document.getElementById("photo-input");
