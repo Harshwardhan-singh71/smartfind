@@ -1,8 +1,7 @@
-# SmartFind project
-- Flask + SQLite + Jinja + plain CSS. Gemini only through ai.py.
-- Always run Python as: D:\PYTHON\python.exe  (plain `python` has no pip)
-- Windows PowerShell.
-- Never commit: smartfind.db, static/uploads/, chat_uploads/, admin.txt, .env, *.zip, allowed_emails.txt, API keys. Repo is public.
-- Change a function or file as a WHOLE, not scattered one-line edits.
-- Remind me: press Ctrl+C before editing; git add/commit/push after each working step.
-- Setup scripts run in the README order. A new table needs an add_*.py script.
+# SmartFind rules for Cline
+- Follow AGENTS.md in the repo root. At the start of every task read AGENTS.md and docs/PROGRESS.md only. Do not scan the repo.
+- Open only the files the task needs. Do not re-read files. Do not reformat or rewrite unrelated code. Do not create new files unless asked.
+- One small change at a time: edit, run `D:\PYTHON\python.exe -m py_compile <file>`, then `D:\PYTHON\python.exe test_smoke.py` (must pass), then continue. If the same error happens twice, stop and ask me for the exact error text.
+- A new table needs an add_*.py script, and it goes in the README setup order.
+- Never read or print .env, admin.txt, smartfind.db, static/uploads or chat_uploads.
+- Keep replies short. At the end, update docs/PROGRESS.md and suggest a commit message.
