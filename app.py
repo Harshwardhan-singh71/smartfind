@@ -285,6 +285,9 @@ def report():
         extra_details = extra_details[:5]
 
         title = request.form["title"].strip()
+        category = request.form.get("category", "").strip()
+        if not category:
+            category = "Other"
         conn = get_db()
         cur = conn.execute(
             "INSERT INTO items (title, description, category, location, status, "
@@ -294,7 +297,7 @@ def report():
             (
                 title,
                 request.form["description"],
-                request.form["category"],
+                category,
                 location,
                 status,
                 session["user_name"],
@@ -568,33 +571,128 @@ def ai_assist():
         # instant local draft: no AI, no waiting, no allowance used
         return jsonify({"success": True, "draft": local_draft(text), "source": "basic", "note": "", "uses_left": None})
 
-    conn = get_db()
-    draft, source, note = None, "basic", ""
-    if not ai.is_available():
-        note = "AI is not available right now, so a basic draft was made."
-    elif not ai.allow_use(conn, session["user_id"]):
-        note = "You have used today's AI quick-fills, so a basic draft was made."
-    else:
-        draft = ai_draft(text)
-        if draft:
-            source = "ai"
+    try:
+        conn = get_db()
+        draft, source, note = None, "basic", ""
+        if not ai.is_available():
+            note = "AI is not available right now, so a basic draft was made."
+        elif not ai.allow_use(conn, session["user_id"]):
+            note = "You have used today's AI quick-fills, so a basic draft was made."
         else:
-            note = "AI is busy right now, so a basic draft was made."
-            # a failed AI call should not cost the student one of today's quick-fills
-            conn.execute(
-                "UPDATE ai_usage SET used = used - 1 "
-                "WHERE user_id = ? AND day = date('now') AND used > 0",
-                (session["user_id"],),
-            )
-            conn.commit()
-    uses_left = ai.uses_left(conn, session["user_id"])
-    conn.close()
+            draft = ai_draft(text)
+            if draft:
+                source = "ai"
+            else:
+                note = "AI is busy right now, so a basic draft was made."
+                # a failed AI call should not cost the student one of today's quick-fills
+                conn.execute(
+                    "UPDATE ai_usage SET used = used - 1 "
+                    "WHERE user_id = ? AND day = date('now') AND used > 0",
+                    (session["user_id"],),
+                )
+                conn.commit()
+        uses_left = ai.uses_left(conn, session["user_id"])
+        conn.close()
+    except Exception:
+        uses_left = 0
 
     if draft is None:
         draft = local_draft(text)
     return jsonify({
         "success": True, "draft": draft, "source": source,
         "note": note, "uses_left": uses_left,
+    })
+
+
+@app.route("/ai/photo-assist", methods=["POST"])
+def ai_photo_assist():
+    """Suggest title, category, and a colour detail from a photo.
+    Runs in background; never makes the student wait. Never sends the photo
+    if the personal-document checkbox is ticked. Never saves the photo.
+    """
+    if "user_id" not in session:
+        print("[photo-assist] refusal: not logged in")
+        return jsonify({"success": False})
+
+    photo = request.files.get("photo")
+    is_personal_doc = request.form.get("is_personal_doc") == "1"
+    if not photo or not photo.filename:
+        print("[photo-assist] refusal: no file")
+        return jsonify({"success": False})
+    if is_personal_doc:
+        print("[photo-assist] refusal: personal doc checkbox ticked")
+        return jsonify({"success": False})
+
+    ext = photo.filename.rsplit(".", 1)[-1].lower() if "." in photo.filename else ""
+    if ext not in {"png", "jpg", "jpeg", "webp"}:
+        print(f"[photo-assist] refusal: bad type ({ext})")
+        return jsonify({"success": False})
+
+    photo_bytes = photo.read()
+    if len(photo_bytes) > 4 * 1024 * 1024:
+        print("[photo-assist] refusal: too big")
+        return jsonify({"success": False})
+
+    conn = get_db()
+    if not ai.allow_use(conn, session["user_id"]):
+        conn.close()
+        print("[photo-assist] refusal: allowance used up")
+        return jsonify({"success": False})
+
+    prompt = (
+        "You are helping a student fill a campus lost-and-found form. "
+        "Look at the photo and reply with ONLY a JSON object with these keys:\n"
+        '- "title": short name of the item, at most 8 words\n'
+        f'- "category": exactly one of: {", ".join(ASSIST_CATEGORIES)}, Other\n'
+        f'- "details": a list of up to 2 objects with label exactly "Brand" or "Colour" and their values, or [] if not clear\n'
+        '- "description": a plain description of the item, at most 120 characters, no markdown\n'
+        "Do not invent facts that the photo does not show."
+    )
+    mime = f"image/{ext}" if ext != "jpg" else "image/jpeg"
+    ai_response = ai.ask_image_json(prompt, photo_bytes, mime, fast=True)
+    if ai_response is None:
+        print(f"[photo-assist] AI returned None: {ai.last_error}")
+    else:
+        # Debug: print raw AI response
+        import json as _json
+        print(f"[photo-assist] raw AI response: {_json.dumps(ai_response, ensure_ascii=False)}")
+    if ai_response and isinstance(ai_response, dict):
+        # clean_ai_draft requires a status; default to "lost" (client can override)
+        ai_response.setdefault("status", "lost")
+    draft = clean_ai_draft(ai_response, "")
+    # For photo assist, use AI's description (max 120 chars) instead of empty text
+    if draft and isinstance(ai_response, dict):
+        ai_desc = str(ai_response.get("description") or "").strip()[:120]
+        if ai_desc:
+            draft["description"] = ai_desc
+    if draft:
+        # Debug: print cleaned draft
+        print(f"[photo-assist] cleaned draft: {_json.dumps(draft, ensure_ascii=False)}")
+
+    if draft is None:
+        # refund the allowance
+        conn.execute(
+            "UPDATE ai_usage SET used = used - 1 "
+            "WHERE user_id = ? AND day = date('now') AND used > 0",
+            (session["user_id"],),
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({"success": False})
+
+    uses_left = ai.uses_left(conn, session["user_id"])
+    conn.close()
+
+    # Return only the fields we support; client will fill only empty ones
+    return jsonify({
+        "success": True,
+        "draft": {
+            "title": draft.get("title", ""),
+            "category": draft.get("category", "Other"),
+            "details": draft.get("details", []),
+            "description": draft.get("description", ""),
+        },
+        "uses_left": uses_left,
     })
 
 # ---------- AI/Proactive Feature: Live Match Preview ----------
@@ -909,7 +1007,7 @@ def item_detail(item_id):
     )
 
 
-PUBLIC_ENDPOINTS = {"login", "register", "static"}
+PUBLIC_ENDPOINTS = {"login", "register", "static", "ai_photo_assist"}
 
 
 @app.before_request

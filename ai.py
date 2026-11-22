@@ -167,3 +167,78 @@ def ask_json(prompt, fast=False):
         return json.loads(text)
     except ValueError:
         return None
+
+
+def _call_gemini_image(prompt, image_bytes, mime_type, json_mode=False, fast=False):
+    """Internal: send prompt + image to Gemini. Returns reply text or None."""
+    global _paused_until, last_error
+    last_error = None
+    if not is_available():
+        last_error = "AI unavailable (no key, or paused after a quota error)"
+        return None
+    config = None
+    if json_mode:
+        try:
+            from google.genai import types
+            config = types.GenerateContentConfig(
+                response_mime_type="application/json", temperature=0.2
+            )
+        except Exception as error:
+            last_error = f"{type(error).__name__}: {str(error)[:300]}"
+            return None
+
+    for attempt in (1, 2):
+        try:
+            from google.genai import types
+            image_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
+            reply = _get_client().models.generate_content(
+                model=os.environ.get("GEMINI_MODEL", MODEL),
+                contents=[prompt, image_part],
+                config=config,
+            )
+            text = (reply.text or "").strip()
+            if not text:
+                last_error = "Gemini returned an empty answer"
+            return text or None
+        except Exception as error:
+            last_error = f"{type(error).__name__}: {str(error)[:300]}"
+            message = str(error).lower()
+            if ("429" in message or "quota" in message or "exhausted" in message) and attempt == 1 and not fast:
+                time.sleep(5)
+                continue
+            if "429" in message or "quota" in message or "exhausted" in message:
+                _paused_until = time.time() + PAUSE_SECONDS
+                return None
+            busy = ("503" in message or "504" in message or "unavailable" in message
+                    or "deadline" in message or "timed out" in message or "timeout" in message)
+            if busy and fast:
+                _paused_until = time.time() + BUSY_PAUSE
+                return None
+            if busy and attempt == 1:
+                time.sleep(RETRY_WAIT)
+                continue
+            return None
+    return None
+
+
+def ask_image(prompt, image_bytes, mime_type, fast=False):
+    """Send a prompt with an image, return the reply text, or None if anything goes wrong.
+    fast=True: no retries; if Gemini is busy, pause AI for BUSY_PAUSE seconds."""
+    result = _call_gemini_image(prompt, image_bytes, mime_type, json_mode=False, fast=fast)
+    if result is None:
+        print(f"[ai.ask_image] returned None: {last_error}")
+    return result
+
+
+def ask_image_json(prompt, image_bytes, mime_type, fast=False):
+    """Like ask_image, but returns a Python dict/list parsed from the reply, or None."""
+    text = _call_gemini_image(prompt, image_bytes, mime_type, json_mode=True, fast=fast)
+    if not text:
+        print(f"[ai.ask_image_json] _call_gemini_image returned None: {last_error}")
+        return None
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
+    try:
+        return json.loads(text)
+    except ValueError as e:
+        print(f"[ai.ask_image_json] JSON parse failed: {e}")
+        return None
