@@ -161,25 +161,28 @@ check("bad date and time from the AI are dropped", dr["event_date"] == "" and dr
 check("unknown detail labels are dropped", dr["details"] == [{"label": "Colour", "value": "Black"}])
 check("private question only for found posts", dr["private_question"] == "")
 check("description is the student's own words", dr["description"] == "I lost my black wallet near the library door")
+appmod.ai._text_cache.clear()   # the cache would answer a repeat of the same text
 ib = alice.post("/ai/assist", json={"text": "I lost my black wallet near the library door", "mode": "basic"}).get_json()
 check("basic mode answers instantly without using the AI", ib["source"] == "basic" and ib["draft"]["title"] and len(prompts) == 1)
 check("prompt contains today's date", date.today().isoformat() in prompts[0])
-check("uses_left is reported", d["uses_left"] == 9)
+check("uses_left is reported", d["uses_left"] == appmod.ai.DAILY_LIMIT - 1)
 appmod.ai.ask_json = lambda p, fast=False: {"status": "hacker", "title": "x"}
 d = alice.post("/ai/assist", json={"text": "I lost my keys"}).get_json()
 check("invalid AI status falls back to the basic draft", d["source"] == "basic" and "busy" in d["note"] and d["draft"]["status"] == "lost")
-check("a failed AI call does not use up the allowance", d["uses_left"] == 9)
+check("a failed AI call does not use up the allowance", d["uses_left"] == appmod.ai.DAILY_LIMIT - 1)
 appmod.ai.ask_json = lambda p, fast=False: None
 d = alice.post("/ai/assist", json={"text": "I have found a black wallet in the Library"}).get_json()
 check("AI returns nothing: basic draft, status found", d["source"] == "basic" and d["draft"]["status"] == "found")
 appmod.ai.ask_json = lambda p, fast=False: good
 conn = db()
-conn.execute("UPDATE ai_usage SET used = 10")
+conn.execute("UPDATE ai_usage SET used = ?", (appmod.ai.DAILY_LIMIT,))
 conn.commit()
 conn.close()
+appmod.ai._text_cache.clear()
 d = alice.post("/ai/assist", json={"text": "I lost my keys"}).get_json()
 check("daily allowance used up: basic draft with a note", d["source"] == "basic" and "used today" in d["note"] and d["uses_left"] == 0)
 appmod.ai.is_available = lambda: False
+appmod.ai._text_cache.clear()
 d = alice.post("/ai/assist", json={"text": "I lost my keys"}).get_json()
 check("no AI key: basic draft", d["source"] == "basic" and "not available" in d["note"])
 appmod.ai.ask_json = real_json
@@ -248,7 +251,7 @@ conn = db()
 conn.execute("UPDATE ai_usage SET used = 0 WHERE user_id = (SELECT id FROM users WHERE email = 'alice@test.com')")
 conn.commit()
 conn.close()
-fs6 = FileStorage(stream=io.BytesIO(img_bytes), filename="test.png", content_type="image/png")
+fs6 = FileStorage(stream=io.BytesIO(b"a-different-fake-photo"), filename="test.png", content_type="image/png")
 r = alice.post("/ai/photo-assist", data={"is_personal_doc": "0", "photo": fs6},
                content_type="multipart/form-data")
 d = r.get_json()
@@ -257,6 +260,23 @@ conn = db()
 used = conn.execute("SELECT used FROM ai_usage WHERE user_id = (SELECT id FROM users WHERE email = 'alice@test.com')").fetchone()[0]
 conn.close()
 check("allowance not consumed on failure", used == 0)
+
+# 7d. Caches: the same text or photo twice calls the AI only once
+appmod.ai._text_cache.clear()
+appmod.ai._photo_cache.clear()
+calls = []
+appmod.ai.is_available = lambda: True
+appmod.ai.ask_json = lambda p, fast=False: (calls.append(1) or good)
+for _ in range(2):
+    dd = alice.post("/ai/assist", json={"text": "I lost my black wallet near the library door"}).get_json()
+check("same text twice calls the AI once", len(calls) == 1 and dd["success"])
+photo_called.clear()
+appmod.ai.ask_image_json = fake_ask_image_json
+for _ in range(2):
+    fsx = FileStorage(stream=io.BytesIO(b"cache-test-photo"), filename="test.png", content_type="image/png")
+    rr = alice.post("/ai/photo-assist", data={"is_personal_doc": "0", "photo": fsx}, content_type="multipart/form-data")
+    dd = rr.get_json()
+check("same photo twice calls the AI once, both succeed", len(photo_called) == 1 and rr.status_code == 200 and dd["success"])
 
 # 8. Admin pages
 r = bob.get("/admin/reports")
