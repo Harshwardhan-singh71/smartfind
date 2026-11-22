@@ -20,7 +20,7 @@ GLOBAL_DAILY_LIMIT = 450        # site-wide daily budget; override with GEMINI_G
 TIMEOUT_MS = 10000              # give up on a slow answer after 10 seconds (nobody should wait longer)
 IMAGE_TIMEOUT_MS = 15000        # give up on a slow image answer after 15 seconds
 RETRY_WAIT = 2                  # seconds to wait before one retry when Gemini is busy (503/504)
-BUSY_PAUSE = 120                # after a busy/timeout error, skip the AI for this long (circuit breaker uses this as fallback)
+BREAKER_PAUSE = 30              # after 2 consecutive busy/timeout errors, pause AI for this long
 PAUSE_SECONDS = 60              # after a quota error, stop calling the AI for this long
 
 _client = None
@@ -146,19 +146,14 @@ def _get_client():
     global _client
     if _client is None:
         from google import genai
-        from google.genai import types
-        _client = genai.Client(
-            api_key=os.environ["GEMINI_API_KEY"],
-            http_options=types.HttpOptions(timeout=TIMEOUT_MS),
-        )
+        _client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
     return _client
 
 
 def ask_text(prompt, json_mode=False, fast=False):
     """Send a prompt, return the reply text, or None if anything goes wrong.
-    fast=True: no retries; if Gemini is busy, pause AI for BUSY_PAUSE seconds so the next
-    users skip it instantly instead of waiting."""
-    global _paused_until, last_error
+    fast=True: no retries; if Gemini is busy, the circuit breaker may pause AI."""
+    global _paused_until, last_error, _consecutive_failures, _cb_until
     last_error = None
     if not is_available():
         last_error = "AI unavailable (no key, or paused after a quota error)"
@@ -168,7 +163,8 @@ def ask_text(prompt, json_mode=False, fast=False):
         try:
             from google.genai import types
             config = types.GenerateContentConfig(
-                response_mime_type="application/json", temperature=0.2
+                response_mime_type="application/json", temperature=0.2,
+                http_options=types.HttpOptions(timeout=TIMEOUT_MS),
             )
         except Exception as error:
             last_error = f"{type(error).__name__}: {str(error)[:300]}"
@@ -184,6 +180,9 @@ def ask_text(prompt, json_mode=False, fast=False):
             text = (reply.text or "").strip()
             if not text:
                 last_error = "Gemini returned an empty answer"
+                _consecutive_failures = 0
+            else:
+                _consecutive_failures = 0
             return text or None
         except Exception as error:   # slow, offline, bad key, quota... never crash the site
             last_error = f"{type(error).__name__}: {str(error)[:300]}"
@@ -193,18 +192,24 @@ def ask_text(prompt, json_mode=False, fast=False):
                 continue
             if "429" in message or "quota" in message or "exhausted" in message:
                 _paused_until = time.time() + PAUSE_SECONDS
+                _consecutive_failures = 0
                 return None
-            busy = "503" in message or "504" in message or "unavailable" in message or "deadline" in message or "timed out" in message or "timeout" in message
-            if busy and fast:
-                _paused_until = time.time() + BUSY_PAUSE
-                return None
-            if busy and attempt == 1:
-                time.sleep(RETRY_WAIT)
-                continue
+            busy = ("503" in message or "504" in message or "unavailable" in message
+                    or "deadline" in message or "timed out" in message or "timeout" in message)
+            
+            if busy:
+                _consecutive_failures += 1
+                if _consecutive_failures >= 2:
+                    _cb_until = time.time() + BREAKER_PAUSE
+                    _consecutive_failures = 0
+                    return None
+                if attempt == 1:
+                    time.sleep(RETRY_WAIT)
+                    continue
+            else:
+                _consecutive_failures = 0
             return None
     return None
-
-
 def ask_json(prompt, fast=False):
     """Like ask_text, but returns a Python dict/list parsed from the reply, or None."""
     text = ask_text(prompt, json_mode=True, fast=fast)
@@ -219,7 +224,7 @@ def ask_json(prompt, fast=False):
 
 def _call_gemini_image(prompt, image_bytes, mime_type, json_mode=False, fast=False):
     """Internal: send prompt + image to Gemini. Returns reply text or None."""
-    global _paused_until, last_error
+    global _paused_until, last_error, _consecutive_failures, _cb_until
     last_error = None
     if not is_available():
         last_error = "AI unavailable (no key, or paused after a quota error)"
@@ -229,7 +234,8 @@ def _call_gemini_image(prompt, image_bytes, mime_type, json_mode=False, fast=Fal
         try:
             from google.genai import types
             config = types.GenerateContentConfig(
-                response_mime_type="application/json", temperature=0.2
+                response_mime_type="application/json", temperature=0.2,
+                http_options=types.HttpOptions(timeout=IMAGE_TIMEOUT_MS),
             )
         except Exception as error:
             last_error = f"{type(error).__name__}: {str(error)[:300]}"
@@ -247,6 +253,9 @@ def _call_gemini_image(prompt, image_bytes, mime_type, json_mode=False, fast=Fal
             text = (reply.text or "").strip()
             if not text:
                 last_error = "Gemini returned an empty answer"
+                _consecutive_failures = 0
+            else:
+                _consecutive_failures = 0
             return text or None
         except Exception as error:
             last_error = f"{type(error).__name__}: {str(error)[:300]}"
@@ -256,22 +265,27 @@ def _call_gemini_image(prompt, image_bytes, mime_type, json_mode=False, fast=Fal
                 continue
             if "429" in message or "quota" in message or "exhausted" in message:
                 _paused_until = time.time() + PAUSE_SECONDS
+                _consecutive_failures = 0
                 return None
             busy = ("503" in message or "504" in message or "unavailable" in message
                     or "deadline" in message or "timed out" in message or "timeout" in message)
-            if busy and fast:
-                _paused_until = time.time() + BUSY_PAUSE
-                return None
-            if busy and attempt == 1:
-                time.sleep(RETRY_WAIT)
-                continue
+            
+            if busy:
+                _consecutive_failures += 1
+                if _consecutive_failures >= 2:
+                    _cb_until = time.time() + BREAKER_PAUSE
+                    _consecutive_failures = 0
+                    return None
+                if attempt == 1:
+                    time.sleep(RETRY_WAIT)
+                    continue
+            else:
+                _consecutive_failures = 0
             return None
     return None
-
-
 def ask_image(prompt, image_bytes, mime_type, fast=False):
     """Send a prompt with an image, return the reply text, or None if anything goes wrong.
-    fast=True: no retries; if Gemini is busy, pause AI for BUSY_PAUSE seconds."""
+    fast=True: no retries; if Gemini is busy, the circuit breaker may pause AI."""
     result = _call_gemini_image(prompt, image_bytes, mime_type, json_mode=False, fast=fast)
     if result is None:
         print(f"[ai.ask_image] returned None: {last_error}")
