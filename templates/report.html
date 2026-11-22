@@ -19,16 +19,38 @@
 
         <form method="POST" enctype="multipart/form-data">
 
-           <label>Photo (optional: take one or choose from gallery. If you only saw the item, you can skip it)</label>
-            <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-bottom: 8px;">
-                <input type="file" name="photo" id="photo-input" accept="image/*" style="flex: 1; min-width: 200px;">
-                <button type="button" id="photo-assist-btn" class="btn-outline" style="white-space: nowrap; display: none;">Suggest from photo</button>
-            </div>
-            <p id="photo-assist-status" class="meta" style="margin-top: 8px; display: none;"></p>
-            <label style="display: flex; align-items: center; gap: 8px; font-weight: 400; color: var(--muted); font-size: 13px; margin-top: 4px;">
+            <style>
+                .photo-chip { display: none; align-items: center; gap: 10px; margin: 8px 0; padding: 10px 12px;
+                              border-radius: 8px; background: #f0f4ff; border: 1px solid #c7d2fe;
+                              font-size: 13px; color: #1e1b4b; }
+                .photo-chip.show { display: flex; }
+                .photo-chip .sub { display: block; color: #64748b; font-size: 12px; }
+                .photo-chip.done { background: #ecfdf3; border-color: #a7f3d0; color: #065f46; }
+                .photo-chip.note { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+                .photo-spinner { width: 16px; height: 16px; flex: none; border: 2px solid #c7d2fe;
+                                 border-top-color: #ff5e2b; border-radius: 50%; animation: pc-spin .8s linear infinite; }
+                .photo-tick { width: 20px; height: 20px; flex: none; }
+                .photo-tick circle { fill: #10b981; transform-origin: center; animation: pc-pop .3s ease; }
+                .photo-tick path { fill: none; stroke: #fff; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round;
+                                   stroke-dasharray: 24; stroke-dashoffset: 24; animation: pc-draw .4s .15s ease forwards; }
+                .just-filled { animation: pc-flash 1.4s ease; }
+                @keyframes pc-spin { to { transform: rotate(360deg); } }
+                @keyframes pc-pop { from { transform: scale(.3); } to { transform: scale(1); } }
+                @keyframes pc-draw { to { stroke-dashoffset: 0; } }
+                @keyframes pc-flash { 0% { background-color: #fff3c4; } 100% { background-color: transparent; } }
+                @media (prefers-reduced-motion: reduce) {
+                    .photo-spinner, .photo-tick circle, .photo-tick path, .just-filled { animation: none; }
+                    .photo-tick path { stroke-dashoffset: 0; }
+                }
+            </style>
+            <label>Photo (optional: take one or choose from gallery. If you only saw the item, you can skip it)</label>
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: 400; color: var(--muted); font-size: 13px; margin: 0 0 8px;">
                 <input type="checkbox" id="photo-personal-doc" name="photo_personal_doc" value="1" style="width: auto;">
                 This photo shows an ID card, bank card or other personal document
             </label>
+            <input type="file" name="photo" id="photo-input" accept="image/*" style="margin-bottom: 4px;">
+            <p class="meta" style="margin: 4px 0;">When you choose a photo we suggest the name and details from it. Tick the box above first if it shows an ID or card; then the photo is never analysed.</p>
+            <div id="photo-assist-status" class="photo-chip" aria-live="polite"></div>
             <img id="photo-preview" alt="Preview"
                  style="display: none; max-width: 100%; max-height: 260px; border-radius: 8px; margin-top: 8px;">
 
@@ -388,123 +410,154 @@
 
         var photoInput = document.getElementById("photo-input");
         var preview = document.getElementById("photo-preview");
-        var photoAssistBtn = document.getElementById("photo-assist-btn");
+        var photoChip = document.getElementById("photo-assist-status");
         var photoPersonalDoc = document.getElementById("photo-personal-doc");
+        var photoRun = 0;          // bumped to cancel / ignore anything still in flight
+        var photoTimer = null;
+        var GRACE_MS = 2000;       // time to tick the ID box before the photo is sent
+
+        function showChip(kind, text, sub) {
+            photoChip.className = "photo-chip show " + kind;
+            photoChip.innerHTML = "";
+            var icon;
+            if (kind === "done") {
+                icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+                icon.setAttribute("viewBox", "0 0 24 24");
+                icon.setAttribute("class", "photo-tick");
+                icon.innerHTML = '<circle cx="12" cy="12" r="11"></circle><path d="M6.5 12.5l4 4 7-8"></path>';
+            } else if (kind === "working") {
+                icon = document.createElement("div");
+                icon.className = "photo-spinner";
+            }
+            if (icon) photoChip.appendChild(icon);
+            var wrap = document.createElement("div");
+            wrap.appendChild(document.createTextNode(text));
+            if (sub) {
+                var s = document.createElement("span");
+                s.className = "sub";
+                s.textContent = sub;
+                wrap.appendChild(s);
+            }
+            photoChip.appendChild(wrap);
+        }
+        function hideChip() {
+            photoChip.className = "photo-chip";
+            photoChip.innerHTML = "";
+        }
+        function cancelPhotoAssist() {
+            photoRun++;
+            clearTimeout(photoTimer);
+            hideChip();
+        }
+        function flashField(el) {
+            if (!el) return;
+            el.classList.remove("just-filled");
+            void el.offsetWidth;
+            el.classList.add("just-filled");
+        }
+
+        function applyPhotoDraft(d) {
+            var titleEl = document.getElementsByName("title")[0];
+            var catEl = document.getElementsByName("category")[0];
+            var descEl = document.getElementsByName("description")[0];
+            if (d.title && !userEdited.has("title")) { titleEl.value = d.title; flashField(titleEl); }
+            if (d.category && d.category !== "Other" && !userEdited.has("category")) { catEl.value = d.category; flashField(catEl); }
+            if (d.description && !userEdited.has("description")) { descEl.value = d.description; flashField(descEl); }
+            if (d.details && d.details.length > 0) {
+                var rows = document.getElementById("detail-rows");
+                var addBtn = document.getElementById("add-detail");
+                d.details.forEach(function (detail) {
+                    if (!detail.label || !detail.value) return;
+                    if (rows.children.length >= 5) return;
+                    var labelInputs = rows.querySelectorAll("input[name='detail_label']");
+                    var found = false;
+                    for (var i = 0; i < labelInputs.length; i++) {
+                        if (labelInputs[i].value.toLowerCase() === String(detail.label).toLowerCase()) {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (found) return;
+                    var div = document.createElement("div");
+                    div.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
+                    var labelInput = document.createElement("input");
+                    labelInput.type = "text";
+                    labelInput.name = "detail_label";
+                    labelInput.setAttribute("list", "detail-labels");
+                    labelInput.maxLength = 40;
+                    labelInput.placeholder = "Label (e.g. Brand)";
+                    labelInput.style.flex = "1";
+                    labelInput.value = detail.label;
+                    var valueInput = document.createElement("input");
+                    valueInput.type = "text";
+                    valueInput.name = "detail_value";
+                    valueInput.maxLength = 200;
+                    valueInput.placeholder = "Detail (e.g. Boat)";
+                    valueInput.style.flex = "2";
+                    valueInput.value = detail.value;
+                    var removeBtn = document.createElement("button");
+                    removeBtn.type = "button";
+                    removeBtn.className = "btn-outline remove-detail";
+                    removeBtn.textContent = "✕";
+                    div.appendChild(labelInput);
+                    div.appendChild(valueInput);
+                    div.appendChild(removeBtn);
+                    rows.appendChild(div);
+                });
+                addBtn.style.display = rows.children.length >= 5 ? "none" : "";
+            }
+            if (typeof checkLiveMatches === "function") checkLiveMatches();
+        }
+
+        function startPhotoAssist(file) {
+            var run = ++photoRun;
+            clearTimeout(photoTimer);
+            showChip("working", "Looking at your photo...", "Tick the box above to stop.");
+            // short grace period so a student can still tick the ID box before anything is sent
+            photoTimer = setTimeout(function () {
+                if (run !== photoRun || photoPersonalDoc.checked) return;
+                shrinkImage(file).then(function (shrunk) {
+                    if (run !== photoRun || photoPersonalDoc.checked) return;
+                    var formData = new FormData();
+                    formData.append("photo", shrunk);
+                    formData.append("is_personal_doc", "0");
+                    return fetch("/ai/photo-assist", { method: "POST", body: formData })
+                        .then(function (r) { return r.json(); })
+                        .then(function (res) {
+                            if (run !== photoRun || photoPersonalDoc.checked) return;
+                            if (res && res.success && res.draft) {
+                                applyPhotoDraft(res.draft);
+                                showChip("done", "Suggested from your photo.", "Please check the fields.");
+                            } else if (res && res.note) {
+                                showChip("note", res.note);
+                            } else {
+                                hideChip();   // nothing to show: the form just stays as it is
+                            }
+                        });
+                }).catch(function () {
+                    if (run === photoRun) hideChip();
+                });
+            }, GRACE_MS);
+        }
 
         photoInput.addEventListener("change", function () {
+            cancelPhotoAssist();
             var f = photoInput.files[0];
-            if (f) {
-                preview.src = URL.createObjectURL(f);
-                preview.style.display = "block";
-                photoAssistBtn.style.display = "";
-            } else {
+            if (!f) {
                 preview.style.display = "none";
-                photoAssistBtn.style.display = "none";
+                return;
             }
-            photoRun++; // ignore any in-flight response for the old photo
+            preview.src = URL.createObjectURL(f);
+            preview.style.display = "block";
+            if (!photoPersonalDoc.checked) startPhotoAssist(f);
         });
 
         photoPersonalDoc.addEventListener("change", function () {
-            photoAssistBtn.style.display = this.checked ? "none" : (photoInput.files[0] ? "" : "none");
-        });
-
-        var photoRun = 0;
-        photoAssistBtn.addEventListener("click", function () {
-            var f = photoInput.files[0];
-            if (!f) return;
-            if (photoPersonalDoc.checked) return;
-            if (photoAssistBtn.disabled) return;
-
-            var run = ++photoRun;
-            var originalText = photoAssistBtn.textContent;
-            photoAssistBtn.disabled = true;
-            photoAssistBtn.textContent = "Looking...";
-
-            shrinkImage(f).then(function (shrunkFile) {
-                var formData = new FormData();
-                formData.append("photo", shrunkFile);
-                formData.append("is_personal_doc", "0");
-
-                fetch("/ai/photo-assist", { method: "POST", body: formData })
-                    .then(function (r) { return r.json(); })
-                    .then(function (res) {
-                        if (run !== photoRun) return;
-                        if (!res.success) {
-                            // Handle exhausted allowance
-                            if (res.note) {
-                                var statusEl = document.getElementById("photo-assist-status");
-                                statusEl.textContent = res.note;
-                                statusEl.style.display = "block";
-                                photoAssistBtn.disabled = true;
-                                photoAssistBtn.textContent = originalText;
-                            }
-                            return;
-                        }
-                        if (!res.draft) return;
-                        var d = res.draft;
-                        var statusEl = document.getElementById("photo-assist-status");
-                        statusEl.style.display = "none";
-                        statusEl.textContent = "";
-                        var titleEl = document.getElementsByName("title")[0];
-                        var catEl = document.getElementsByName("category")[0];
-                        var descEl = document.getElementsByName("description")[0];
-
-                        if (d.title && !userEdited.has("title")) titleEl.value = d.title;
-                        if (d.category && d.category !== "Other" && !userEdited.has("category")) catEl.value = d.category;
-                        if (d.description && !userEdited.has("description")) descEl.value = d.description;
-
-                        if (d.details && d.details.length > 0) {
-                            var rows = document.getElementById("detail-rows");
-                            var addBtn = document.getElementById("add-detail");
-                            d.details.forEach(function (detail) {
-                                if (!detail.label || !detail.value) return;
-                                if (rows.children.length >= 5) return;
-                                var labelInputs = rows.querySelectorAll("input[name='detail_label']");
-                                var found = false;
-                                for (var i = 0; i < labelInputs.length; i++) {
-                                    if (labelInputs[i].value.toLowerCase() === String(detail.label).toLowerCase()) {
-                                        found = true;
-                                        break;
-                                    }
-                                }
-                                if (found) return;
-                                var div = document.createElement("div");
-                                div.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
-                                var labelInput = document.createElement("input");
-                                labelInput.type = "text";
-                                labelInput.name = "detail_label";
-                                labelInput.setAttribute("list", "detail-labels");
-                                labelInput.maxLength = 40;
-                                labelInput.placeholder = "Label (e.g. Brand)";
-                                labelInput.style.flex = "1";
-                                labelInput.value = detail.label;
-                                var valueInput = document.createElement("input");
-                                valueInput.type = "text";
-                                valueInput.name = "detail_value";
-                                valueInput.maxLength = 200;
-                                valueInput.placeholder = "Detail (e.g. Boat)";
-                                valueInput.style.flex = "2";
-                                valueInput.value = detail.value;
-                                var removeBtn = document.createElement("button");
-                                removeBtn.type = "button";
-                                removeBtn.className = "btn-outline remove-detail";
-                                removeBtn.textContent = "✕";
-                                div.appendChild(labelInput);
-                                div.appendChild(valueInput);
-                                div.appendChild(removeBtn);
-                                rows.appendChild(div);
-                            });
-                            addBtn.style.display = rows.children.length >= 5 ? "none" : "";
-                        }
-                    })
-                    .catch(function () {})
-                    .finally(function () {
-                        if (run === photoRun) {
-                            photoAssistBtn.disabled = false;
-                            photoAssistBtn.textContent = originalText;
-                        }
-                    });
-            });
+            if (this.checked) {
+                cancelPhotoAssist();      // ticking the box always stops the suggestion
+            } else if (photoInput.files[0]) {
+                startPhotoAssist(photoInput.files[0]);
+            }
         });
     </script>
 {% endblock %}
