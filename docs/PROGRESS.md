@@ -1,7 +1,11 @@
 # SmartFind: progress (the source of truth for the current state)
 Last updated: 23 Nov 2026. Update this file at the end of every working session. (It replaces the old STATUS.md.)
 
-## NEXT TASK: design polish and phone layout
+## Done
+- Phone menu: hamburger menu at max-width 700px, vertical list, 44px links, bell dropdown constrained to `calc(100vw - 24px)`.
+- Safety net: `html, body { max-width: 100%; overflow-x: hidden; }`, `overflow-wrap: anywhere` on nav links.
+- Footer fix: `body` column flex with `min-height: 100vh` and `main` flex: 1.
+- Item page actions: full-width buttons, min-height 44px, 10px gap on phones.
 
 ## After that (in order)
 - AI step E: safety scan of posts (phone/ID numbers, abuse) feeding the admin Reports page.

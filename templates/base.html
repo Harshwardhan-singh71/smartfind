@@ -27,13 +27,14 @@
             </svg>
             <span>Smart<span class="brand-find">Find</span></span>
         </a>
-        <div class="nav-links">
+        <button type="button" class="menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="nav-links">☰ Menu{% if session.user_id and unread_count %}<span class="badge">{{ unread_count }}</span>{% endif %}</button>
+        <div class="nav-links" id="nav-links">
             <a href="/">Home</a>
             <a href="/report">Report item</a>
             {% if session.user_id %}
                 <a href="/activity">My activity</a>
                 <div class="bell-wrap">
-                    <button type="button" class="bell" id="bell-btn" aria-label="Notifications">🔔{% if unread_count %}<span class="badge">{{ unread_count }}</span>{% endif %}</button>
+                    <button type="button" class="bell" id="bell-btn" aria-label="Notifications">🔔<span class="bell-label">Notifications</span>{% if unread_count %}<span class="badge">{{ unread_count }}</span>{% endif %}</button>
                     <div class="bell-menu" id="bell-menu">
                         <div class="bell-head">
                             <b>Notifications</b>
@@ -76,6 +77,16 @@
     </footer>
 
     <script>
+        (function () {
+            var toggle = document.getElementById("menu-toggle");
+            var nav = document.querySelector(".navbar");
+            if (toggle && nav) {
+                toggle.addEventListener("click", function () {
+                    var open = nav.classList.toggle("open");
+                    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+                });
+            }
+        })();
         (function () {
             var btn = document.getElementById("bell-btn");
             var menu = document.getElementById("bell-menu");

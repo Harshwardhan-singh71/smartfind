@@ -56,7 +56,7 @@
             {% endif %}
         </p>
         <form method="POST" action="/renew/{{ item.id }}">
-            <button type="submit" class="btn-outline">Keep this post active</button>
+            <button type="submit" class="btn-outline action-btn">Keep this post active</button>
         </form>
     </div>
     {% endif %}
@@ -65,19 +65,19 @@
     <div class="card">
         <h3>Actions</h3>
         {% if not from_id %}
-            <a class="btn btn-outline" href="/matches/{{ item.id }}">See possible matches</a>
+            <a class="btn btn-outline action-btn" href="/matches/{{ item.id }}">See possible matches</a>
         {% endif %}
 
         {% if not item.resolved %}
             <form method="POST" action="/resolve/{{ item.id }}" style="display: inline;">
-                <button type="submit">Mark as returned</button>
+                <button type="submit" class="action-btn">Mark as returned</button>
             </form>
         {% endif %}
 
         {% if is_admin %}
             <form method="POST" action="/delete/{{ item.id }}" style="display: inline;"
                   onsubmit="return confirm('Delete this post permanently? (admin)');">
-                <button type="submit" class="btn-danger">Delete</button>
+                <button type="submit" class="btn-danger action-btn">Delete</button>
             </form>
         {% endif %}
     </div>

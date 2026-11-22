@@ -12,16 +12,24 @@
 
 * { box-sizing: border-box; }
 
+html, body { max-width: 100%; overflow-x: hidden; }
 body {
     margin: 0;
     font-family: "Segoe UI", Arial, sans-serif;
     background: var(--bg);
     color: var(--text);
     line-height: 1.5;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    overflow-x: hidden;
 }
 
 a { color: var(--primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+/* Layout */
+.container { flex: 1; }
 
 /* Navbar */
 .navbar {
@@ -36,7 +44,10 @@ a:hover { text-decoration: underline; }
 }
 .brand { font-size: 22px; font-weight: 700; color: var(--primary); }
 .brand:hover { text-decoration: none; }
-.nav-links { display: flex; align-items: center; gap: 16px; }
+.nav-links { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; justify-content: flex-end; }
+.nav-links a { overflow-wrap: anywhere; }
+.bell-item { overflow-wrap: anywhere; }
+.nav-user { overflow-wrap: anywhere; }
 .nav-user { color: var(--muted); }
 .btn-small {
     background: var(--primary);
@@ -245,6 +256,22 @@ h1, h2, h3 { font-weight: 800; }
     .hero-card { padding: 20px; }
     .hero-card h1 { font-size: 26px; }
     .hero-search { flex-direction: column; }
+    .navbar { padding: 8px 12px; }
+    .rotator { display: block; font-size: 16px; animation: none; margin-top: 4px; }
+    .action-card { padding: 12px; }
+    .action-card h3 { font-size: 16px; margin: 0 0 8px; }
+    .action-card { display: flex; flex-wrap: wrap; gap: 10px; }
+    .action-card a.btn,
+    .action-card button { width: 100%; min-height: 44px; padding: 10px; font-size: 14px; }
+    /* Stack AI Quick-Fill on phones: input full width, button full width below */
+    .ai-box > div { display: block !important; }
+    .ai-box > div input { width: 100% !important; }
+    .ai-box > div button { width: 100% !important; min-height: 44px !important; }
+    /* Ensure tap targets are at least 44px high on phones */
+    button, .btn, .btn-small, a.btn, a.nav-link {
+        min-height: 44px;
+        padding: 12px 14px;
+    }
 }
 
 /* ===== Restyle the inner pages in the campus theme ===== */
@@ -410,6 +437,9 @@ footer {
     .how { grid-template-columns: 1fr; }
     .how-arrow { transform: rotate(90deg); text-align: center; }
     .action-row { grid-template-columns: 1fr; }
+    .btn-outline, .btn-danger { width: 100%; min-height: 44px; margin: 0 0 10px; font-size: 14px; }
+    .btn-outline:hover, .btn-danger:hover { min-height: 44px; }
+    .form-card button { width: 100%; min-height: 44px; margin: 0 0 10px; }
 }
 
 /* Clickable cards and the detail page */
@@ -428,7 +458,7 @@ code { background: #fff; border: 1px solid var(--border); padding: 2px 6px; bord
 /* ---------- Admin activity log ---------- */
 .log-list {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr));
     gap: 10px;
     margin-top: 14px;
 }
@@ -636,3 +666,114 @@ button.bell-link {
 .call-icon { font-size: 22px; line-height: 1; width: 44px; height: 44px; border-radius: 50%; border: none; background: #2e7d32; color: #fff; cursor: pointer; flex-shrink: 0; }
 .call-icon.off { background: #c8c8c8; }
 .call-setting { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: #f5f7ff; border: 1px solid #dde3f5; border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+
+/* ===== Phone layout (menu, no sideways overflow, full-width buttons) ===== */
+
+/* Never let a wide child stretch the page (body is a flex column) */
+.container { min-width: 0; width: 100%; }
+img, svg, video { max-width: 100%; }
+h1, h2, h3, p, li, .meta { overflow-wrap: anywhere; }
+.stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.tabs { overflow-x: auto; flex-wrap: nowrap; -webkit-overflow-scrolling: touch; }
+.tab { white-space: nowrap; }
+.card-top { gap: 8px; flex-wrap: wrap; }
+
+/* Menu button + bell label: hidden on desktop */
+.menu-toggle { display: none; }
+.bell-label { display: none; }
+.navbar { position: relative; }
+
+@media (max-width: 980px) {
+    .navbar { padding: 8px 12px; }
+    .brand { font-size: 24px; }
+    .logo-mark { width: 40px; height: 40px; }
+    .menu-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        border-radius: 8px;
+        padding: 8px 14px;
+        font-size: 15px;
+        font-weight: 600;
+        min-height: 44px;
+    }
+    .menu-toggle:hover { background: rgba(255, 255, 255, 0.24); }
+    .menu-toggle .badge { margin-left: 0; }
+
+    .nav-links {
+        display: none;
+        flex-basis: 100%;
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+        flex-wrap: nowrap;
+        gap: 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.2);
+        margin-top: 4px;
+        padding-top: 4px;
+    }
+    .navbar.open .nav-links { display: flex; }
+    .nav-links > a, .nav-links > .admin-pill, .nav-links > .bell-wrap {
+        width: 100%;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .nav-links > a {
+        display: flex;
+        align-items: center;
+        min-height: 48px;
+        padding: 10px 6px;
+        font-size: 16px;
+    }
+    .nav-links > a.btn-small { justify-content: center; margin: 8px 0; border-radius: 8px; border-bottom: none; }
+    .nav-links > .admin-pill { align-self: flex-start; width: auto; margin: 10px 6px; border-bottom: none; }
+
+    /* Bell becomes a full-width row, its list opens inline below it */
+    .bell-wrap { display: block; }
+    button.bell {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 48px;
+        padding: 10px 6px;
+        font-size: 16px;
+        font-weight: 400;
+        text-align: left;
+    }
+    button.bell:hover { background: none; }
+    .bell-label { display: inline; }
+    .bell-menu {
+        position: static;
+        width: 100%;
+        max-width: none;
+        margin: 0 0 10px;
+        box-shadow: none;
+    }
+}
+
+@media (max-width: 700px) {
+    .container { margin: 16px auto; }
+    .stat { padding: 10px 6px; }
+    .stat-number { font-size: 24px; }
+    .stat-label { font-size: 12px; }
+    .tab { padding: 10px 14px; }
+
+    /* Buttons inside cards: full width, easy to tap, even gaps */
+    .card a.btn, .card form button, .card button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        min-height: 44px;
+        margin: 0;
+        text-align: center;
+    }
+    .card a.btn { margin-top: 10px; }
+    .card form { display: block !important; margin: 10px 0 0; }
+    .card details form button { margin-top: 12px; }
+    .card .bell-link { width: auto; min-height: 0; }
+    .chat-form button { width: auto; }
+}
