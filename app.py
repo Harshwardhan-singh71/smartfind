@@ -1,3 +1,4 @@
+import hashlib
 import os
 import re
 import sqlite3
@@ -567,17 +568,26 @@ def ai_assist():
     if not text:
         return jsonify({"error": "No text provided."}), 400
 
-    if payload.get("mode") == "basic":
-        # instant local draft: no AI, no waiting, no allowance used
-        return jsonify({"success": True, "draft": local_draft(text), "source": "basic", "note": "", "uses_left": None})
-
+    conn = get_db()
     try:
-        conn = get_db()
+        # Check in-memory cache first (max 200 entries, drop oldest)
+        lower_text = text.lower()
+        if lower_text in ai._text_cache:
+            # Cache hit: return cached AI result, no AI call, no allowance used
+            cached = ai._text_cache[lower_text]
+            ai._text_cache.move_to_end(lower_text)
+            uses_left = ai.uses_left(conn, session["user_id"])
+            return jsonify({"success": True, "draft": cached, "source": "cache", "note": "", "uses_left": uses_left})
+
+        if payload.get("mode") == "basic":
+            # instant local draft: no AI, no waiting, no allowance used
+            return jsonify({"success": True, "draft": local_draft(text), "source": "basic", "note": "", "uses_left": None})
+
         draft, source, note = None, "basic", ""
         if not ai.is_available():
             note = "AI is not available right now, so a basic draft was made."
         elif not ai.allow_use(conn, session["user_id"]):
-            note = "You have used today's AI quick-fills, so a basic draft was made."
+            note = "You have used today's AI quick-fills. Please fill the form by hand."
         else:
             draft = ai_draft(text)
             if draft:
@@ -592,12 +602,20 @@ def ai_assist():
                 )
                 conn.commit()
         uses_left = ai.uses_left(conn, session["user_id"])
-        conn.close()
-    except Exception:
+    except Exception as e:
+        print(f"[ai_assist] error: {e}")
         uses_left = 0
+    finally:
+        conn.close()
 
     if draft is None:
         draft = local_draft(text)
+    else:
+        # Store successful AI result in cache for future use
+        if source == "ai" and lower_text not in ai._text_cache:
+            ai._text_cache[lower_text] = draft
+            if len(ai._text_cache) > ai._CACHE_MAX:
+                ai._text_cache.popitem(last=False)
     return jsonify({
         "success": True, "draft": draft, "source": source,
         "note": note, "uses_left": uses_left,
@@ -634,10 +652,26 @@ def ai_photo_assist():
         return jsonify({"success": False})
 
     conn = get_db()
+    # Check in-memory cache for this image (sha256 of bytes, max 200 entries)
+    photo_hash = hashlib.sha256(photo_bytes).hexdigest()
+    if photo_hash in ai._photo_cache:
+        # Cache hit: return cached draft without AI call or allowance usage
+        draft = ai._photo_cache[photo_hash]
+        uses_left = ai.uses_left(conn, session["user_id"])
+        return jsonify({
+            "success": True,
+            "draft": {
+                "title": draft.get("title", ""),
+                "category": draft.get("category", "Other"),
+                "details": draft.get("details", []),
+                "description": draft.get("description", ""),
+            },
+            "uses_left": uses_left,
+        })
+
     if not ai.allow_use(conn, session["user_id"]):
-        conn.close()
         print("[photo-assist] refusal: allowance used up")
-        return jsonify({"success": False})
+        return jsonify({"success": False, "note": "You have used today's photo suggestions. Please fill the form by hand."})
 
     prompt = (
         "You are helping a student fill a campus lost-and-found form. "
@@ -660,14 +694,23 @@ def ai_photo_assist():
         # clean_ai_draft requires a status; default to "lost" (client can override)
         ai_response.setdefault("status", "lost")
     draft = clean_ai_draft(ai_response, "")
-    # For photo assist, use AI's description (max 120 chars) instead of empty text
+    # For photo assist, use AI's description (max 120 chars, cut at word boundary)
     if draft and isinstance(ai_response, dict):
-        ai_desc = str(ai_response.get("description") or "").strip()[:120]
+        raw_desc = str(ai_response.get("description") or "").strip()
+        if len(raw_desc) > 120:
+            # cut at last space within 120 chars, no trailing space
+            ai_desc = raw_desc[:120].rsplit(" ", 1)[0].strip()
+        else:
+            ai_desc = raw_desc
         if ai_desc:
             draft["description"] = ai_desc
     if draft:
         # Debug: print cleaned draft
         print(f"[photo-assist] cleaned draft: {_json.dumps(draft, ensure_ascii=False)}")
+        # Store in cache
+        ai._photo_cache[photo_hash] = draft
+        if len(ai._photo_cache) > ai._CACHE_MAX:
+            ai._photo_cache.popitem(last=False)
 
     if draft is None:
         # refund the allowance

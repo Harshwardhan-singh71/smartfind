@@ -24,6 +24,7 @@
                 <input type="file" name="photo" id="photo-input" accept="image/*" style="flex: 1; min-width: 200px;">
                 <button type="button" id="photo-assist-btn" class="btn-outline" style="white-space: nowrap; display: none;">Suggest from photo</button>
             </div>
+            <p id="photo-assist-status" class="meta" style="margin-top: 8px; display: none;"></p>
             <label style="display: flex; align-items: center; gap: 8px; font-weight: 400; color: var(--muted); font-size: 13px; margin-top: 4px;">
                 <input type="checkbox" id="photo-personal-doc" name="photo_personal_doc" value="1" style="width: auto;">
                 This photo shows an ID card, bank card or other personal document
@@ -311,6 +312,7 @@
             aiBtn.addEventListener("click", function () {
                 var text = aiInput.value.trim();
                 if (!text) return;
+                aiBtn.disabled = false; // re-enable in case it was disabled from previous exhausted call
                 var run = ++aiRun;
                 var touched = false;
                 var form = aiInput.closest("form") || document;
@@ -330,7 +332,15 @@
                     // optional AI upgrade in the background: silent, never blocks, never required
                     return callAssist(text, "ai").then(function (r2) {
                         if (run !== aiRun || touched) return;
-                        if (r2.success && r2.source === "ai") applyDraft(r2.draft);
+                        if (!r2.success) {
+                            if (r2.note) {
+                                aiStatus.textContent = r2.note;
+                                aiStatus.style.color = "var(--muted)";
+                                aiBtn.disabled = true;
+                            }
+                            return;
+                        }
+                        if (r2.source === "ai") applyDraft(r2.draft);
                     });
                 }).catch(function () {});
             });
@@ -419,8 +429,22 @@
                     .then(function (r) { return r.json(); })
                     .then(function (res) {
                         if (run !== photoRun) return;
-                        if (!res.success || !res.draft) return;
+                        if (!res.success) {
+                            // Handle exhausted allowance
+                            if (res.note) {
+                                var statusEl = document.getElementById("photo-assist-status");
+                                statusEl.textContent = res.note;
+                                statusEl.style.display = "block";
+                                photoAssistBtn.disabled = true;
+                                photoAssistBtn.textContent = originalText;
+                            }
+                            return;
+                        }
+                        if (!res.draft) return;
                         var d = res.draft;
+                        var statusEl = document.getElementById("photo-assist-status");
+                        statusEl.style.display = "none";
+                        statusEl.textContent = "";
                         var titleEl = document.getElementsByName("title")[0];
                         var catEl = document.getElementsByName("category")[0];
                         var descEl = document.getElementsByName("description")[0];
@@ -431,50 +455,46 @@
 
                         if (d.details && d.details.length > 0) {
                             var rows = document.getElementById("detail-rows");
+                            var addBtn = document.getElementById("add-detail");
                             d.details.forEach(function (detail) {
                                 if (!detail.label || !detail.value) return;
-                                var labelKey = "detail_label_" + detail.label;
-                                var valueKey = "detail_value_" + detail.value;
-                                if (userEdited.has(labelKey) || userEdited.has(valueKey)) return;
-
-                                var inputs = rows.getElementsByName("detail_label");
+                                if (rows.children.length >= 5) return;
+                                var labelInputs = rows.querySelectorAll("input[name='detail_label']");
                                 var found = false;
-                                for (var i = 0; i < inputs.length; i++) {
-                                    if (inputs[i].value.toLowerCase() === detail.label.toLowerCase()) {
-                                        var valInput = inputs[i].parentNode.getElementsByName("detail_value")[0];
-                                        if (valInput) valInput.value = detail.value;
+                                for (var i = 0; i < labelInputs.length; i++) {
+                                    if (labelInputs[i].value.toLowerCase() === String(detail.label).toLowerCase()) {
                                         found = true;
                                         break;
                                     }
                                 }
-                                if (!found && rows.children.length < 5) {
-                                    var div = document.createElement("div");
-                                    div.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
-                                    var labelInput = document.createElement("input");
-                                    labelInput.type = "text";
-                                    labelInput.name = "detail_label";
-                                    labelInput.list = "detail-labels";
-                                    labelInput.maxLength = 40;
-                                    labelInput.placeholder = "Label (e.g. Brand)";
-                                    labelInput.style.flex = "1";
-                                    labelInput.value = detail.label;
-                                    var valueInput = document.createElement("input");
-                                    valueInput.type = "text";
-                                    valueInput.name = "detail_value";
-                                    valueInput.maxLength = 200;
-                                    valueInput.placeholder = "Detail (e.g. Boat)";
-                                    valueInput.style.flex = "2";
-                                    valueInput.value = detail.value;
-                                    var removeBtn = document.createElement("button");
-                                    removeBtn.type = "button";
-                                    removeBtn.className = "btn-outline remove-detail";
-                                    removeBtn.textContent = "\u2715";
-                                    div.appendChild(labelInput);
-                                    div.appendChild(valueInput);
-                                    div.appendChild(removeBtn);
-                                    rows.appendChild(div);
-                                }
+                                if (found) return;
+                                var div = document.createElement("div");
+                                div.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
+                                var labelInput = document.createElement("input");
+                                labelInput.type = "text";
+                                labelInput.name = "detail_label";
+                                labelInput.setAttribute("list", "detail-labels");
+                                labelInput.maxLength = 40;
+                                labelInput.placeholder = "Label (e.g. Brand)";
+                                labelInput.style.flex = "1";
+                                labelInput.value = detail.label;
+                                var valueInput = document.createElement("input");
+                                valueInput.type = "text";
+                                valueInput.name = "detail_value";
+                                valueInput.maxLength = 200;
+                                valueInput.placeholder = "Detail (e.g. Boat)";
+                                valueInput.style.flex = "2";
+                                valueInput.value = detail.value;
+                                var removeBtn = document.createElement("button");
+                                removeBtn.type = "button";
+                                removeBtn.className = "btn-outline remove-detail";
+                                removeBtn.textContent = "✕";
+                                div.appendChild(labelInput);
+                                div.appendChild(valueInput);
+                                div.appendChild(removeBtn);
+                                rows.appendChild(div);
                             });
+                            addBtn.style.display = rows.children.length >= 5 ? "none" : "";
                         }
                     })
                     .catch(function () {})

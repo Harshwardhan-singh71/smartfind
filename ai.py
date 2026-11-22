@@ -12,9 +12,10 @@ import os
 import re
 import sqlite3
 import time
+from collections import OrderedDict
 
 MODEL = "gemini-3.8-flash"     # the model name in Google's current docs; override with GEMINI_MODEL
-DAILY_LIMIT = 10                # AI actions per user per day
+DAILY_LIMIT = 25                # AI actions per user per day
 TIMEOUT_MS = 10000              # give up on a slow answer after 10 seconds (nobody should wait longer)
 RETRY_WAIT = 2                  # seconds to wait before one retry when Gemini is busy (503/504)
 BUSY_PAUSE = 120                # after a busy/timeout error, skip the AI for this long
@@ -23,6 +24,11 @@ PAUSE_SECONDS = 60              # after a quota error, stop calling the AI for t
 _client = None
 _paused_until = 0.0
 last_error = None   # the most recent problem, for debugging (never shown to users)
+
+# In-memory caches: sha256(image_bytes) -> cleaned draft, max 200 entries
+_photo_cache = OrderedDict()  # for ai_photo_assist
+_text_cache = OrderedDict()   # for ai_assist, keyed by lowercased text
+_CACHE_MAX = 200
 
 
 def load_env(path=".env"):
@@ -44,6 +50,17 @@ def is_available():
     """True when a key is set and the AI is not paused after a quota error."""
     return bool(os.environ.get("GEMINI_API_KEY")) and time.time() >= _paused_until
 
+
+def _cache_get_or_set(cache, key, factory, max_entries):
+    """Return cached value if present, otherwise compute via factory, cache it, and trim."""
+    if key in cache:
+        cache.move_to_end(key)
+        return cache[key]
+    value = factory()
+    cache[key] = value
+    if len(cache) > max_entries:
+        cache.popitem(last=False)
+    return value
 
 # ---------- privacy: remove sensitive details before anything is sent ----------
 

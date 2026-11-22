@@ -39,6 +39,9 @@ Run: `D:\PYTHON\python.exe app.py`. Test: `D:\PYTHON\python.exe test_smoke.py`.
 
 ## Decisions log (newest first)
 - 22 Nov: Fixed AI image call 400 error by removing `thinking_budget=0` (unsupported on gemini-3.5-flash-lite). JSON mode now uses only `response_mime_type="application/json"` + `temperature=0.2`. Removed `_testing_mode` flag from `ai.py`; tests fake `ai.is_available` instead. All 52 smoke tests pass.
+- 22 Nov: Bug fix: UnboundLocalError in ai_photo_assist cache-hit path (conn not defined before use) and ai_assist route (inconsistent conn management). Fixed by moving conn = get_db() to start of both routes (after login check) and wrapping route bodies in try/finally to close conn exactly once before every return; unexpected exceptions return {"success": false} with status 200, never 500.
+- 22 Nov: Bug fix: Photo suggestion detail rows not appearing on report page. JS in report.html now properly creates detail rows (Brand/Colour) from AI response, with max 5 rows, no duplicate labels, and never overwrites student-edited rows.
+- 22 Nov: Added tests to test_smoke.py: (a) photo cache hit returns success with same draft on second call, no 500; (b) unexpected exception in photo-assist returns {"success": false} with status 200, never 500.
 - 19 Nov: one status file (`docs/PROGRESS.md`); project knowledge lives in the repo (`AGENTS.md`, `docs/`) so every AI tool starts informed.
 - 19 Nov: the assistant box shipped first as a local parser (instant, no API errors). It must become Gemini-first with the local parser as fallback.
 - 18 Nov: all Gemini calls go through `ai.py`; Flash model for the app (a Google AI Pro subscription does not give API quota).
