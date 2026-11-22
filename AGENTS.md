@@ -14,6 +14,7 @@ The owner should not have to explain the project again. If something is missing 
 - All Gemini calls go through `ai.py` only. The site must keep working when the AI is down or the key is missing. Never send ID cards, wallets, card photos, or phone/ID numbers to the AI.
 - Phone numbers are shown only to the other person in a chat who was allowed. Anonymous claimants stay hidden from the finder everywhere (the admin log keeps real names).
 - No paid services. Branch `features` has the latest code (`main` is older).
+- NEVER-WAIT RULE: no feature may make a student wait for AI. Every AI feature must first give an instant local result. Gemini only upgrades it in the background, with a timeout of 10 s or less, and any failure is silent. Never show students wording like 'AI busy' or 'basic draft'. The site must work fully with AI off.
 
 ## How to work with the owner
 - One small step at a time. Give WHOLE-FILE or WHOLE-FUNCTION replacements, with closing lines included. No "add this somewhere below".
