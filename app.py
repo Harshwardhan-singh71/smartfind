@@ -594,13 +594,7 @@ def ai_assist():
                 source = "ai"
             else:
                 note = "AI is busy right now, so a basic draft was made."
-                # a failed AI call should not cost the student one of today's quick-fills
-                conn.execute(
-                    "UPDATE ai_usage SET used = used - 1 "
-                    "WHERE user_id = ? AND day = date('now') AND used > 0",
-                    (session["user_id"],),
-                )
-                conn.commit()
+                ai.refund_use(conn, session["user_id"])
         uses_left = ai.uses_left(conn, session["user_id"])
     except Exception as e:
         print(f"[ai_assist] error: {e}")
@@ -713,13 +707,7 @@ def ai_photo_assist():
             ai._photo_cache.popitem(last=False)
 
     if draft is None:
-        # refund the allowance
-        conn.execute(
-            "UPDATE ai_usage SET used = used - 1 "
-            "WHERE user_id = ? AND day = date('now') AND used > 0",
-            (session["user_id"],),
-        )
-        conn.commit()
+        ai.refund_use(conn, session["user_id"])
         conn.close()
         return jsonify({"success": False})
 

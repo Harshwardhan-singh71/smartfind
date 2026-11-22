@@ -9,7 +9,19 @@ Last updated: 22 Nov 2026. Update this file at the end of every working session.
 - Deployment after asking the teacher: PythonAnywhere free (Plan A), laptop demo (Plan B). Render free is unsuitable (ephemeral disk).
 - Teammates are added last.
 
-## Done (all tested; `test_smoke.py` passes 52/52)
+## Done
+AI step D: safety limits for ~100 users on free Gemini tier.
+- ai.py: DAILY_LIMIT=10 per user, GLOBAL_DAILY_LIMIT=450 (env GEMINI_GLOBAL_LIMIT override)
+- ai.py: allow_use() checks both user and global (user_id=0) rows, increments both
+- ai.py: refund_use(conn, user_id) decrements both user and global rows if > 0
+- ai.py: circuit breaker globals (_consecutive_failures, _cb_until) added; is_available() checks _cb_until
+- ai.py: IMAGE_TIMEOUT_MS=15000 for image calls, TEXT_TIMEOUT_MS=10000 for text
+- app.py: /ai/assist and /ai/photo-assist use ai.refund_use() instead of inline refund code
+- test_smoke.py: verify all checks pass with new logic (requires scikit-learn)
+
+## Known issues
+- Circuit breaker logic in ask_text/_call_gemini_image not yet fully implemented due to editor tooling issues
+- scikit-learn needed for test_smoke.py; install with: python -m pip install scikit-learn
 AI step C (photo auto-fill, improved): Report page "Suggest from photo" button now:
 - Shrinks photo in browser before upload (canvas, longest side max 768px, JPEG quality 0.7) for faster AI calls
 - AI uses no thinking config for gemini-3.5-flash-lite (thinking_budget=0 caused 400 INVALID_ARGUMENT); max_output_tokens removed for speed

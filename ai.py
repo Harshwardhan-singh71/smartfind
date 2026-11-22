@@ -15,15 +15,21 @@ import time
 from collections import OrderedDict
 
 MODEL = "gemini-3.8-flash"     # the model name in Google's current docs; override with GEMINI_MODEL
-DAILY_LIMIT = 25                # AI actions per user per day
+DAILY_LIMIT = 10                # AI actions per user per day
+GLOBAL_DAILY_LIMIT = 450        # site-wide daily budget; override with GEMINI_GLOBAL_LIMIT env var
 TIMEOUT_MS = 10000              # give up on a slow answer after 10 seconds (nobody should wait longer)
+IMAGE_TIMEOUT_MS = 15000        # give up on a slow image answer after 15 seconds
 RETRY_WAIT = 2                  # seconds to wait before one retry when Gemini is busy (503/504)
-BUSY_PAUSE = 120                # after a busy/timeout error, skip the AI for this long
+BUSY_PAUSE = 120                # after a busy/timeout error, skip the AI for this long (circuit breaker uses this as fallback)
 PAUSE_SECONDS = 60              # after a quota error, stop calling the AI for this long
 
 _client = None
 _paused_until = 0.0
 last_error = None   # the most recent problem, for debugging (never shown to users)
+
+# Circuit breaker state for consecutive busy/timeout failures
+_consecutive_failures = 0   # counts consecutive busy/timeout errors
+_cb_until = 0.0               # until when the circuit breaker pause is active
 
 # In-memory caches: sha256(image_bytes) -> cleaned draft, max 200 entries
 _photo_cache = OrderedDict()  # for ai_photo_assist
@@ -47,8 +53,12 @@ load_env()
 
 
 def is_available():
-    """True when a key is set and the AI is not paused after a quota error."""
-    return bool(os.environ.get("GEMINI_API_KEY")) and time.time() >= _paused_until
+    """True when a key is set and the AI is not paused after a quota error or circuit breaker."""
+    return (
+        bool(os.environ.get("GEMINI_API_KEY"))
+        and time.time() >= _paused_until
+        and time.time() >= _cb_until
+    )
 
 
 def _cache_get_or_set(cache, key, factory, max_entries):
@@ -84,19 +94,27 @@ def redact(text):
 # ---------- per-user daily allowance ----------
 
 def allow_use(conn, user_id, limit=DAILY_LIMIT):
-    """Count one AI action for this user today. Returns False when the allowance is used up."""
+    """Count one AI action for this user today. Returns False when the allowance is used up.
+    Checks both user and global (user_id=0) usage; returns False if either is at limit."""
     conn.execute(
-        "INSERT OR IGNORE INTO ai_usage (user_id, day, used) VALUES (?, date('now'), 0)",
-        (user_id,),
+        "INSERT OR IGNORE INTO ai_usage (user_id, day, used) VALUES (?, date('now'), 0)", (user_id,)
     )
-    used = conn.execute(
+    conn.execute(
+        "INSERT OR IGNORE INTO ai_usage (user_id, day, used) VALUES (?, date('now'), 0)", (0,)
+    )
+    user_used = conn.execute(
         "SELECT used FROM ai_usage WHERE user_id = ? AND day = date('now')", (user_id,)
     ).fetchone()[0]
-    if used >= limit:
+    global_used = conn.execute(
+        "SELECT used FROM ai_usage WHERE user_id = 0 AND day = date('now')"
+    ).fetchone()[0]
+    if user_used >= limit or global_used >= GLOBAL_DAILY_LIMIT:
         return False
     conn.execute(
-        "UPDATE ai_usage SET used = used + 1 WHERE user_id = ? AND day = date('now')",
-        (user_id,),
+        "UPDATE ai_usage SET used = used + 1 WHERE user_id = ? AND day = date('now')", (user_id,)
+    )
+    conn.execute(
+        "UPDATE ai_usage SET used = used + 1 WHERE user_id = 0 AND day = date('now')"
     )
     conn.commit()
     return True
@@ -107,6 +125,19 @@ def uses_left(conn, user_id, limit=DAILY_LIMIT):
         "SELECT used FROM ai_usage WHERE user_id = ? AND day = date('now')", (user_id,)
     ).fetchone()
     return limit - (row[0] if row else 0)
+
+
+def refund_use(conn, user_id):
+    """Refund one AI action for this user and the global budget.
+    Both the user row and the global row (user_id=0) are decremented if > 0."""
+    conn.execute(
+        "UPDATE ai_usage SET used = used - 1 WHERE user_id = ? AND day = date('now') AND used > 0",
+        (user_id,),
+    )
+    conn.execute(
+        "UPDATE ai_usage SET used = used - 1 WHERE user_id = 0 AND day = date('now') AND used > 0"
+    )
+    conn.commit()
 
 
 # ---------- talking to Gemini ----------
