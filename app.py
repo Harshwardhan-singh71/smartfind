@@ -645,6 +645,24 @@ def ai_photo_assist():
         print("[photo-assist] refusal: too big")
         return jsonify({"success": False})
 
+    # mode=basic: instant local colour, no AI call, no allowance used
+    if request.form.get("mode") == "basic":
+        from photo_bot import local_colour
+        colour = local_colour(photo_bytes)
+        if colour is None:
+            print("[photo-assist] basic mode: local_colour returned None")
+            return jsonify({"success": False})
+        print(f"[photo-assist] basic mode: colour={colour}")
+        return jsonify({
+            "success": True,
+            "draft": {
+                "title": "",
+                "category": "Other",
+                "details": [{"label": "Colour", "value": colour}],
+                "description": "",
+            },
+        })
+
     conn = get_db()
     # Check in-memory cache for this image (sha256 of bytes, max 200 entries)
     photo_hash = hashlib.sha256(photo_bytes).hexdigest()

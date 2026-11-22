@@ -1,3 +1,4 @@
 Flask
 scikit-learn
 google-genai
+Pillow

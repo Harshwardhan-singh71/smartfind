@@ -518,21 +518,45 @@
                 if (run !== photoRun || photoPersonalDoc.checked) return;
                 shrinkImage(file).then(function (shrunk) {
                     if (run !== photoRun || photoPersonalDoc.checked) return;
-                    var formData = new FormData();
-                    formData.append("photo", shrunk);
-                    formData.append("is_personal_doc", "0");
-                    return fetch("/ai/photo-assist", { method: "POST", body: formData })
+                    // Step 1: call mode=basic first (instant local colour, no AI call)
+                    var formDataBasic = new FormData();
+                    formDataBasic.append("photo", shrunk);
+                    formDataBasic.append("is_personal_doc", "0");
+                    formDataBasic.append("mode", "basic");
+                    var basicRes = null;
+                    fetch("/ai/photo-assist", { method: "POST", body: formDataBasic })
                         .then(function (r) { return r.json(); })
-                        .then(function (res) {
+                        .then(function (basicRes_) {
                             if (run !== photoRun || photoPersonalDoc.checked) return;
-                            if (res && res.success && res.draft) {
-                                applyPhotoDraft(res.draft);
+                            basicRes = basicRes_;
+                            // If mode=basic succeeded, fill the Colour row immediately
+                            if (basicRes && basicRes.success && basicRes.draft) {
+                                applyPhotoDraft(basicRes.draft);
                                 showChip("done", "Suggested from your photo.", "Please check the fields.");
-                            } else if (res && res.note) {
-                                showChip("note", res.note);
-                            } else {
-                                hideChip();   // nothing to show: the form just stays as it is
                             }
+                            // Step 2: now make the normal AI request
+                            var formDataAI = new FormData();
+                            formDataAI.append("photo", shrunk);
+                            formDataAI.append("is_personal_doc", "0");
+                            return fetch("/ai/photo-assist", { method: "POST", body: formDataAI })
+                                .then(function (r) { return r.json(); })
+                                .then(function (aiRes) {
+                                    if (run !== photoRun || photoPersonalDoc.checked) return;
+                                    if (aiRes && aiRes.success && aiRes.draft) {
+                                        // AI succeeded: upgrade title, category, description, Brand
+                                        applyPhotoDraft(aiRes.draft);
+                                        // keep the green tick if we had basic colour
+                                        showChip("done", "Suggested from your photo.", "Please check the fields.");
+                                    } else if (basicRes && basicRes.success) {
+                                        // AI failed but basic succeeded: keep Colour row and green tick
+                                        showChip("done", "Suggested from your photo.", "Please check the fields.");
+                                    } else {
+                                        // Both gave nothing: hide chip silently
+                                        hideChip();
+                                    }
+                                });
+                        }).catch(function () {
+                            if (run === photoRun) hideChip();
                         });
                 }).catch(function () {
                     if (run === photoRun) hideChip();
