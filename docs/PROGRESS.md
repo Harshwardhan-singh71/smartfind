@@ -1,15 +1,15 @@
 # SmartFind: progress (the source of truth for the current state)
-Last updated: 22 Nov 2026. Update this file at the end of every working session. (It replaces the old STATUS.md.)
+Last updated: 23 Nov 2026. Update this file at the end of every working session. (It replaces the old STATUS.md.)
 
-## NEXT TASK: AI step D: smarter matching using photos/descriptions; advisory claim check for the finder.
+## NEXT TASK: design polish and phone layout
 
 ## After that (in order)
 - AI step E: safety scan of posts (phone/ID numbers, abuse) feeding the admin Reports page.
-- Design polish and phone layout; cleanup (delete real-ID test posts, secret key); keep README current.
 - Deployment after asking the teacher: PythonAnywhere free (Plan A), laptop demo (Plan B). Render free is unsuitable (ephemeral disk).
 - Teammates are added last.
 
 ## Done
+AI step C: automatic photo suggestion (2 s grace, ID tick box first, animated chip), local colour bot (photo_bot.py, Pillow), site-wide AI budget 450 + per-user 10, circuit breaker (pause 30 s after 2 timeouts in a row), caches. Tests: test_smoke.py, test_photo_bot.py (12), test_ai_limits.py (10)
 AI step D: safety limits for ~100 users on free Gemini tier.
 - ai.py: DAILY_LIMIT=10 per user, GLOBAL_DAILY_LIMIT=450 (env GEMINI_GLOBAL_LIMIT override)
 - ai.py: allow_use() checks both user and global (user_id=0) rows, increments both
@@ -30,23 +30,7 @@ AI step D: safety limits for ~100 users on free Gemini tier.
 - Test (1,2,3): Circuit breaker not implemented - _cb_until stays 0.0, no pause on busy failures
 - Test (4): Global budget (user_id=0) exhaustion blocks other users via allow_use
 - Test (5): refund_use restores both user and global usage counts
-- Test (6): Per-user DAILY_LIMIT only stops that user; other users unaffected
-- Test (4): Global budget (user_id=0) exhaustion blocks other users via allow_use
-- Test (5): refund_use restores both user and global usage counts
-- Test (6): Per-user DAILY_LIMIT only stops that user; other users unaffected
-AI step C (photo auto-fill, improved): Report page "Suggest from photo" button now:
-- Shrinks photo in browser before upload (canvas, longest side max 768px, JPEG quality 0.7) for faster AI calls
-- AI uses no thinking config for gemini-3.5-flash-lite (thinking_budget=0 caused 400 INVALID_ARGUMENT); max_output_tokens removed for speed
-- Category fills only if student hasn't changed it (tracks real edits via input/change events, not just empty value)
-- AI suggests title, category, brand, colour detail row, and description (max 120 chars, plain words)
-- Never asks for/accepts place/date/time from photo
-- Description only fills if empty; all values validated with clean_ai_draft
-- Button shows "Looking..." + disabled while loading; on failure returns to normal silently
-- Category select changed from `<option selected>Other</option>` to `<option value="">-- choose --</option>`
-- Photo is never saved; personal-doc checkbox blocks AI call entirely
-- Failed calls refund the daily allowance; never shows "AI busy" to students
-- **Local colour bot: instant colour detection from photo without AI (Pillow-based, HSV thresholds)**, works even when Gemini is slow or paused; fills the Colour row immediately on the report page
-AI step B2 (Gemini-first assistant): the Report page now fills instantly from the local parser, and Gemini upgrades the draft silently in the background. If Gemini is busy, nothing is shown to the student.
+- Test (6): Per-user DAILY_LIMIT only stops that user; other users unaffectedfirst assistant): the Report page now fills instantly from the local parser, and Gemini upgrades the draft silently in the background. If Gemini is busy, nothing is shown to the student.
 Login-only site with admin-created accounts; home tabs All/Lost/Found/Seen/Resolved/Old; photo-first report form with detail rows; claims with private question, optional anonymous claimant; finder accepts one claim; chat (any file up to 10 MB, no executables); optional phone numbers on My profile, per-chat "Allow calls", call icon (phones only); sightings ("Ask about this sighting"); notifications; match alerts with rules, "Not mine", strong/weaker tiers and "Why" lines; Old posts after Lost 45 / Found 60 / Seen 14 days with "Keep this post active"; Report this post and admin Reports page; admin activity log; stay-logged-in; PWA manifest; footer safety note; post titles are stripped on save.
 AI: Gemini connected and tested; `ai.py` (the only door to Gemini: 30 s timeout, one retry on 503/504, one 5 s retry then a 60 s pause on 429, 10 AI actions per user per day in table `ai_usage`, redacts phone/email/card/ID numbers, returns None on any failure, `ai.last_error`). Report page assistant box (`/ai/assist`) works as a local keyword parser.
 
