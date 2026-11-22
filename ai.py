@@ -15,8 +15,9 @@ import time
 
 MODEL = "gemini-3.8-flash"     # the model name in Google's current docs; override with GEMINI_MODEL
 DAILY_LIMIT = 10                # AI actions per user per day
-TIMEOUT_MS = 30000              # give up on a slow answer after 30 seconds
+TIMEOUT_MS = 10000              # give up on a slow answer after 10 seconds (nobody should wait longer)
 RETRY_WAIT = 2                  # seconds to wait before one retry when Gemini is busy (503/504)
+BUSY_PAUSE = 120                # after a busy/timeout error, skip the AI for this long
 PAUSE_SECONDS = 60              # after a quota error, stop calling the AI for this long
 
 _client = None
@@ -105,8 +106,10 @@ def _get_client():
     return _client
 
 
-def ask_text(prompt, json_mode=False):
-    """Send a prompt, return the reply text, or None if anything goes wrong."""
+def ask_text(prompt, json_mode=False, fast=False):
+    """Send a prompt, return the reply text, or None if anything goes wrong.
+    fast=True: no retries; if Gemini is busy, pause AI for BUSY_PAUSE seconds so the next
+    users skip it instantly instead of waiting."""
     global _paused_until, last_error
     last_error = None
     if not is_available():
@@ -137,13 +140,16 @@ def ask_text(prompt, json_mode=False):
         except Exception as error:   # slow, offline, bad key, quota... never crash the site
             last_error = f"{type(error).__name__}: {str(error)[:300]}"
             message = str(error).lower()
-            if ("429" in message or "quota" in message or "exhausted" in message) and attempt == 1:
+            if ("429" in message or "quota" in message or "exhausted" in message) and attempt == 1 and not fast:
                 time.sleep(5)
                 continue
             if "429" in message or "quota" in message or "exhausted" in message:
                 _paused_until = time.time() + PAUSE_SECONDS
                 return None
-            busy = "503" in message or "504" in message or "unavailable" in message or "deadline" in message
+            busy = "503" in message or "504" in message or "unavailable" in message or "deadline" in message or "timed out" in message or "timeout" in message
+            if busy and fast:
+                _paused_until = time.time() + BUSY_PAUSE
+                return None
             if busy and attempt == 1:
                 time.sleep(RETRY_WAIT)
                 continue
@@ -151,9 +157,9 @@ def ask_text(prompt, json_mode=False):
     return None
 
 
-def ask_json(prompt):
+def ask_json(prompt, fast=False):
     """Like ask_text, but returns a Python dict/list parsed from the reply, or None."""
-    text = ask_text(prompt, json_mode=True)
+    text = ask_text(prompt, json_mode=True, fast=fast)
     if not text:
         return None
     text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())

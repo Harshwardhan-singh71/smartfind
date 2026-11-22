@@ -325,16 +325,13 @@ def report():
 
 # ---------- AI Feature: Assistant Bot (Report Page Helper) ----------
 
-@app.route("/ai/assist", methods=["POST"])
-def ai_assist():
-    """Instant local parser for the report form. Zero latency, zero API errors."""
-    if "user_id" not in session:
-        return jsonify({"error": "Login required"}), 401
+ASSIST_PLACES = ['Library', 'Mess', 'Canteen', 'Cricket Ground', 'Parking', 'Classroom', 'Lab', 'Hostel', 'Auditorium', 'Sports Complex', 'Lecture Hall', 'Professor Cabin', 'Bus Stop', 'Academic Block']
+ASSIST_CATEGORIES = ['Wallet', 'Bottle', 'Electronics', 'Books', 'ID Card', 'Keys', 'Clothing']
+ASSIST_DETAIL_LABELS = ['Brand', 'Colour', 'Size', 'Model', 'Sticker / marks', 'Contents']
 
-    text = request.json.get("text", "").strip()
-    if not text:
-        return jsonify({"error": "No text provided."}), 400
 
+def local_draft(text):
+    """Basic keyword parser. Used when the AI is unavailable, busy, or out of allowance."""
     lower_text = text.lower()
     draft = {
         "status": "lost",
@@ -352,13 +349,13 @@ def ai_assist():
     # 1. Smart Status Detection
     if any(w in lower_text for w in ["lost", "looking for", "missed", "missing"]):
         draft["status"] = "lost"
-    elif any(w in lower_text for w in ["found", "picked up", "has", "have"]):
+    elif any(w in lower_text for w in ["found", "picked up"]):
         draft["status"] = "found"
     elif any(w in lower_text for w in ["seen", "saw", "spotted"]):
         draft["status"] = "seen"
 
     # 2. Campus Place Detection (with place_details extraction)
-    places = ['Library', 'Mess', 'Canteen', 'Cricket Ground', 'Parking', 'Classroom', 'Lab', 'Hostel', 'Auditorium', 'Sports Complex', 'Lecture Hall', 'Professor Cabin', 'Bus Stop', 'Academic Block']
+    places = ASSIST_PLACES
     for p in places:
         if p.lower() in lower_text:
             draft["place"] = p
@@ -375,7 +372,7 @@ def ai_assist():
             break
 
     # 3. Category Detection
-    categories = ['Wallet', 'Bottle', 'Electronics', 'Books', 'ID Card', 'Keys', 'Clothing']
+    categories = ASSIST_CATEGORIES
     for cat in categories:
         if cat.lower() in lower_text:
             draft["category"] = cat
@@ -476,11 +473,128 @@ def ai_assist():
 
     # 8. Description (everything they typed is a good start for description)
     draft["description"] = text
+    return draft
 
+
+def _pick(value, allowed):
+    """Return the allowed option that matches value (ignoring case), or ''."""
+    value = str(value or "").strip().lower()
+    for option in allowed:
+        if option.lower() == value:
+            return option
+    return ""
+
+
+def clean_ai_draft(data, text):
+    """Check everything Gemini returned against the form's allowed values."""
+    if not isinstance(data, dict):
+        return None
+
+    def s(key, limit):
+        return str(data.get(key) or "").strip()[:limit]
+
+    status = s("status", 10).lower()
+    title = s("title", 100)
+    if status not in ("lost", "found", "seen") or not title:
+        return None
+
+    today = date.today()
+    event_date = ""
+    day = parse_day(s("event_date", 10))
+    if day and today - timedelta(days=365) <= day <= today:
+        event_date = day.isoformat()
+    event_time = s("event_time", 5)
+    if not re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", event_time):
+        event_time = ""
+
+    details = []
+    raw_details = data.get("details")
+    if isinstance(raw_details, list):
+        for row in raw_details:
+            if not isinstance(row, dict):
+                continue
+            label = _pick(row.get("label"), ASSIST_DETAIL_LABELS)
+            value = str(row.get("value") or "").strip()[:200]
+            if label and value:
+                details.append({"label": label, "value": value})
+    return {
+        "status": status,
+        "title": title,
+        "category": _pick(data.get("category"), ASSIST_CATEGORIES) or "Other",
+        "place": _pick(data.get("place"), ASSIST_PLACES),
+        "place_details": s("place_details", 100),
+        "event_date": event_date,
+        "event_time": event_time,
+        "private_question": s("private_question", 200) if status == "found" else "",
+        "details": details[:5],
+        "description": text,   # the student's own words, not text invented by the AI
+    }
+
+
+def ai_draft(text):
+    """Ask Gemini (through ai.py) for a form draft. Returns a checked draft or None."""
+    today = date.today()
+    prompt = (
+        "You help fill in a lost-and-found form for a university campus. "
+        "Read the student's message and reply with ONLY a JSON object with these keys:\n"
+        '- "status": "lost" (they lost it), "found" (they found it and have it) or "seen" (they only saw it somewhere)\n'
+        '- "title": short name of the item, at most 8 words\n'
+        f'- "category": exactly one of: {", ".join(ASSIST_CATEGORIES)}, Other\n'
+        f'- "place": exactly one of: {", ".join(ASSIST_PLACES)}, or "" if none fits\n'
+        '- "place_details": short extra location words such as "near the back door", or ""\n'
+        f'- "event_date": YYYY-MM-DD (today is {today.isoformat()}, a {today.strftime("%A")}); work out words like yesterday; "" if not stated\n'
+        '- "event_time": HH:MM in 24-hour time, or ""\n'
+        '- "private_question": only when status is "found": one short question only the real owner could answer, '
+        'for example about what is inside or a mark on it. Never include the answer. Otherwise ""\n'
+        f'- "details": a list of up to 5 objects {{"label": ..., "value": ...}} where label is one of: {", ".join(ASSIST_DETAIL_LABELS)}\n'
+        "Do not invent facts that the message does not state.\n"
+        f"Student's message: <<<{text}>>>"
+    )
+    return clean_ai_draft(ai.ask_json(prompt, fast=True), text)
+
+
+@app.route("/ai/assist", methods=["POST"])
+def ai_assist():
+    """Fill the report form from plain words: Gemini first, basic parser as the fallback."""
+    if "user_id" not in session:
+        return jsonify({"error": "Login required"}), 401
+
+    payload = request.get_json(silent=True) or {}
+    text = str(payload.get("text", "")).strip()[:500]
+    if not text:
+        return jsonify({"error": "No text provided."}), 400
+
+    if payload.get("mode") == "basic":
+        # instant local draft: no AI, no waiting, no allowance used
+        return jsonify({"success": True, "draft": local_draft(text), "source": "basic", "note": "", "uses_left": None})
+
+    conn = get_db()
+    draft, source, note = None, "basic", ""
+    if not ai.is_available():
+        note = "AI is not available right now, so a basic draft was made."
+    elif not ai.allow_use(conn, session["user_id"]):
+        note = "You have used today's AI quick-fills, so a basic draft was made."
+    else:
+        draft = ai_draft(text)
+        if draft:
+            source = "ai"
+        else:
+            note = "AI is busy right now, so a basic draft was made."
+            # a failed AI call should not cost the student one of today's quick-fills
+            conn.execute(
+                "UPDATE ai_usage SET used = used - 1 "
+                "WHERE user_id = ? AND day = date('now') AND used > 0",
+                (session["user_id"],),
+            )
+            conn.commit()
+    uses_left = ai.uses_left(conn, session["user_id"])
+    conn.close()
+
+    if draft is None:
+        draft = local_draft(text)
     return jsonify({
-        "success": True,
-        "draft": draft,
-        "uses_left": "Unlimited (Local Mode)"
+        "success": True, "draft": draft, "source": source,
+        "note": note, "uses_left": uses_left,
     })
 
 # ---------- AI/Proactive Feature: Live Match Preview ----------

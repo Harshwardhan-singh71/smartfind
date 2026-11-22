@@ -29,6 +29,7 @@ for script in SETUP:
 
 sys.path.insert(0, HERE)
 import sqlite3
+from datetime import date
 from werkzeug.security import generate_password_hash
 import app as appmod
 
@@ -129,6 +130,46 @@ r = alice.post("/ai/assist", json={"text": "I lost my black wallet in the Librar
 data = r.get_json(silent=True) or {}
 check("assistant fills a draft", r.status_code == 200 and data.get("draft", {}).get("place") == "Library")
 check("assistant needs login", app.test_client().post("/ai/assist", json={"text": "x"}).status_code in (302, 401))
+
+# 7b. Gemini-first assistant (a fake ai module, so no real calls)
+real_avail, real_json = appmod.ai.is_available, appmod.ai.ask_json
+prompts = []
+good = {"status": "lost", "title": "Black leather wallet", "category": "wallet", "place": "library",
+        "place_details": "near the door", "event_date": "2999-01-01", "event_time": "25:99",
+        "private_question": "ignored", "details": [{"label": "colour", "value": "Black"}, {"label": "Secret", "value": "x"}, "junk"]}
+appmod.ai.is_available = lambda: True
+appmod.ai.ask_json = lambda p, fast=False: (prompts.append(p) or good)
+d = alice.post("/ai/assist", json={"text": "I lost my black wallet near the library door"}).get_json()
+dr = d["draft"]
+check("AI draft is used when valid", d["source"] == "ai" and dr["title"] == "Black leather wallet")
+check("AI values are matched to the form's allowed lists", dr["category"] == "Wallet" and dr["place"] == "Library")
+check("bad date and time from the AI are dropped", dr["event_date"] == "" and dr["event_time"] == "")
+check("unknown detail labels are dropped", dr["details"] == [{"label": "Colour", "value": "Black"}])
+check("private question only for found posts", dr["private_question"] == "")
+check("description is the student's own words", dr["description"] == "I lost my black wallet near the library door")
+ib = alice.post("/ai/assist", json={"text": "I lost my black wallet near the library door", "mode": "basic"}).get_json()
+check("basic mode answers instantly without using the AI", ib["source"] == "basic" and ib["draft"]["title"] and len(prompts) == 1)
+check("prompt contains today's date", date.today().isoformat() in prompts[0])
+check("uses_left is reported", d["uses_left"] == 9)
+appmod.ai.ask_json = lambda p, fast=False: {"status": "hacker", "title": "x"}
+d = alice.post("/ai/assist", json={"text": "I lost my keys"}).get_json()
+check("invalid AI status falls back to the basic draft", d["source"] == "basic" and "busy" in d["note"] and d["draft"]["status"] == "lost")
+check("a failed AI call does not use up the allowance", d["uses_left"] == 9)
+appmod.ai.ask_json = lambda p, fast=False: None
+d = alice.post("/ai/assist", json={"text": "I have found a black wallet in the Library"}).get_json()
+check("AI returns nothing: basic draft, status found", d["source"] == "basic" and d["draft"]["status"] == "found")
+appmod.ai.ask_json = lambda p, fast=False: good
+conn = db()
+conn.execute("UPDATE ai_usage SET used = 10")
+conn.commit()
+conn.close()
+d = alice.post("/ai/assist", json={"text": "I lost my keys"}).get_json()
+check("daily allowance used up: basic draft with a note", d["source"] == "basic" and "used today" in d["note"] and d["uses_left"] == 0)
+appmod.ai.is_available = lambda: False
+d = alice.post("/ai/assist", json={"text": "I lost my keys"}).get_json()
+check("no AI key: basic draft", d["source"] == "basic" and "not available" in d["note"])
+appmod.ai.is_available, appmod.ai.ask_json = real_avail, real_json
+check("empty text is refused", alice.post("/ai/assist", json={"text": "  "}).status_code == 400)
 
 # 8. Admin pages
 r = bob.get("/admin/reports")

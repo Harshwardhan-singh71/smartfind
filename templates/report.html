@@ -242,56 +242,89 @@
             var aiBtn = document.getElementById("ai-btn");
             var aiInput = document.getElementById("ai-input");
             var aiStatus = document.getElementById("ai-status");
+            function setField(name, value) {
+                if (value) document.getElementsByName(name)[0].value = value;
+            }
+            function applyDraft(d) {
+                if (d.status) sel.value = d.status;
+                setField("title", d.title);
+                setField("category", d.category);
+                setField("place", d.place);
+                setField("place_details", d.place_details);
+                setField("event_date", d.event_date);
+                setField("event_time", d.event_time);
+                setField("private_question", d.private_question);
+                setField("description", d.description);
+                if (d.details && d.details.length > 0) {
+                    var rows = document.getElementById("detail-rows");
+                    var addBtn = document.getElementById("add-detail");
+                    rows.innerHTML = "";
+                    d.details.forEach(function (detail) {
+                        if (rows.children.length >= 5) return;
+                        var div = document.createElement("div");
+                        div.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
+                        var labelInput = document.createElement("input");
+                        labelInput.type = "text";
+                        labelInput.name = "detail_label";
+                        labelInput.setAttribute("list", "detail-labels");
+                        labelInput.maxLength = 40;
+                        labelInput.placeholder = "Label (e.g. Brand)";
+                        labelInput.style.flex = "1";
+                        labelInput.value = detail.label || "";
+                        var valueInput = document.createElement("input");
+                        valueInput.type = "text";
+                        valueInput.name = "detail_value";
+                        valueInput.maxLength = 200;
+                        valueInput.placeholder = "Detail (e.g. Boat)";
+                        valueInput.style.flex = "2";
+                        valueInput.value = detail.value || "";
+                        var removeBtn = document.createElement("button");
+                        removeBtn.type = "button";
+                        removeBtn.className = "btn-outline remove-detail";
+                        removeBtn.textContent = "\u2715";
+                        div.appendChild(labelInput);
+                        div.appendChild(valueInput);
+                        div.appendChild(removeBtn);
+                        rows.appendChild(div);
+                    });
+                    addBtn.style.display = rows.children.length >= 5 ? "none" : "";
+                }
+                toggle();
+                if (typeof checkLiveMatches === "function") checkLiveMatches();
+            }
+            function callAssist(text, mode) {
+                return fetch("/ai/assist", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({text: text, mode: mode})
+                }).then(function (r) { return r.json(); });
+            }
+            var aiRun = 0;
             aiBtn.addEventListener("click", function () {
                 var text = aiInput.value.trim();
                 if (!text) return;
-                aiStatus.textContent = "AI is thinking...";
+                var run = ++aiRun;
+                var touched = false;
+                var form = aiInput.closest("form") || document;
+                function markTouched() { touched = true; }
+                form.addEventListener("input", markTouched, {once: true});
                 aiStatus.style.display = "block";
-                aiStatus.style.color = "#ffa062";
-                fetch("/ai/assist", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({text: text})
-                }).then(function (r) { return r.json(); })
-                .then(function (res) {
-                    if (res.success) {
-                        aiStatus.textContent = "Draft ready!";
-                        aiStatus.style.color = "green";
-                        if (res.draft.status) sel.value = res.draft.status;
-                        if (res.draft.title) document.getElementsByName("title")[0].value = res.draft.title;
-                        if (res.draft.category) document.getElementsByName("category")[0].value = res.draft.category;
-                        if (res.draft.place) document.getElementsByName("place")[0].value = res.draft.place;
-                        if (res.draft.place_details) document.getElementsByName("place_details")[0].value = res.draft.place_details;
-                        if (res.draft.event_date) document.getElementsByName("event_date")[0].value = res.draft.event_date;
-                        if (res.draft.event_time) document.getElementsByName("event_time")[0].value = res.draft.event_time;
-                        if (res.draft.private_question) document.getElementsByName("private_question")[0].value = res.draft.private_question;
-                        if (res.draft.description) document.getElementsByName("description")[0].value = res.draft.description;
-                        // Fill detail rows
-                        if (res.draft.details && res.draft.details.length > 0) {
-                            var rows = document.getElementById("detail-rows");
-                            var addBtn = document.getElementById("add-detail");
-                            res.draft.details.forEach(function(detail) {
-                                if (rows.children.length >= 5) return;
-                                var div = document.createElement("div");
-                                div.style.cssText = "display: flex; gap: 8px; margin-top: 8px;";
-                                div.innerHTML =
-                                    '<input type="text" name="detail_label" list="detail-labels" maxlength="40" placeholder="Label (e.g. Brand)" style="flex: 1;" value="' + (detail.label || "") + '">' +
-                                    '<input type="text" name="detail_value" maxlength="200" placeholder="Detail (e.g. Boat)" style="flex: 2;" value="' + (detail.value || "") + '">' +
-                                    '<button type="button" class="btn-outline remove-detail">✕</button>';
-                                rows.appendChild(div);
-                            });
-                            if (rows.children.length >= 5) addBtn.style.display = "none";
-                        }
-                        toggle();
-                        checkLiveMatches(); // Trigger a match check immediately
-                    } else {
-                        aiStatus.textContent = res.error || "AI error.";
+                // 1) instant basic draft: the student never waits
+                callAssist(text, "basic").then(function (res) {
+                    if (!res.success) {
+                        aiStatus.textContent = res.error || "Could not make a draft.";
                         aiStatus.style.color = "red";
+                        return;
                     }
-                }).catch(function () {
-                    aiStatus.textContent = "AI connection error.";
-                    aiStatus.style.color = "red";
-                });
+                    applyDraft(res.draft);
+                    aiStatus.textContent = "Draft ready. Please check the fields.";
+                    aiStatus.style.color = "green";
+                    // optional AI upgrade in the background: silent, never blocks, never required
+                    return callAssist(text, "ai").then(function (r2) {
+                        if (run !== aiRun || touched) return;
+                        if (r2.success && r2.source === "ai") applyDraft(r2.draft);
+                    });
+                }).catch(function () {});
             });
 
         toggle();
