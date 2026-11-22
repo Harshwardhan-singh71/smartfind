@@ -23,3 +23,5 @@ scripts/
 chat_uploads/
 .vscode/
 _old/
+*.bak
+debug_test*.py
