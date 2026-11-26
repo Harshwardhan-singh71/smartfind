@@ -1,7 +1,9 @@
 """Demo data for hosts where the database starts empty (like Vercel).
 
 Called from app.py only when running on Vercel. It never runs on your laptop.
-Accounts use the password from the SMARTFIND_DEMO_PASSWORD environment variable.
+Student demo accounts use the SMARTFIND_DEMO_PASSWORD environment variable.
+The admin account uses SMARTFIND_ADMIN_PASSWORD (if it is not set, it falls back to
+the demo password).
 """
 import os
 import sqlite3
@@ -23,6 +25,8 @@ def seed_if_empty():
 
         password = os.environ.get("SMARTFIND_DEMO_PASSWORD", DEFAULT_PASSWORD)
         pw_hash = generate_password_hash(password)
+        admin_password = os.environ.get("SMARTFIND_ADMIN_PASSWORD") or password
+        admin_hash = generate_password_hash(admin_password)
 
         people = [
             ("Aarav (demo)", "aarav@demo.smartfind", "9000000001"),
@@ -34,10 +38,11 @@ def seed_if_empty():
 
         ids = {}
         for name, email, phone in people:
+            is_admin = bool(admin_email) and email == admin_email
             cur = conn.execute(
                 "INSERT INTO users (name, email, password_hash, must_change_password, phone) "
                 "VALUES (?, ?, ?, 0, ?)",
-                (name, email, pw_hash, phone),
+                (name, email, admin_hash if is_admin else pw_hash, phone),
             )
             ids[email] = cur.lastrowid
 
