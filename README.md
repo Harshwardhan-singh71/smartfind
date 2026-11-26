@@ -2,6 +2,14 @@
 
 A centralized website for Dayananda Sagar University where students and staff report lost, found and seen items in one place, replacing scattered WhatsApp groups. Likely matches are suggested automatically, and owners are verified before an item is handed back.
 
+## Live demo
+- **Link:** https://smartfind-lac.vercel.app
+- **Login email:** `aarav@demo.smartfind`
+- **Password:** `DsuDemo#2026`
+- A second student account, to try claims and chat between two users: `meera@demo.smartfind` (same password).
+
+Notes: the first page load can take 10 to 20 seconds. The demo runs on Vercel with temporary data, so posts and photos can reset. The full version, with the admin panel and permanent storage, runs locally (see "How to Run"). The demo accounts exist only on the hosted demo.
+
 ## Features
 - **Private, login-only site.** No public registration. The admin creates accounts (name, email, optional phone). Each user gets a temporary password and must choose their own at first login. Failed logins are rate-limited, and users stay signed in for weeks.
 - **Three post types:** Lost, Found and Seen. Each post has a category, exact place, date, time and an optional photo. Home page tabs: All, Lost, Found, Seen, Resolved and Old. Keyword search.
@@ -88,7 +96,8 @@ python test_photo_bot.py
 - Smarter matching that also compares photos and descriptions
 - Advisory claim check for the finder
 - Safety scan for posts that show phone or ID numbers
-- Online deployment
+- Permanent deployment (PythonAnywhere); the Vercel link above is a temporary demo
+- Forgot password and account emails
 
 ## Authors
 Harshwardhan Singh, 2nd year CSE, Dayananda Sagar University
