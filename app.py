@@ -1,8 +1,11 @@
 import hashlib
 import os
 import re
+import runpy
 import sqlite3
+import subprocess
 import secrets
+import sys
 import time
 import uuid
 from datetime import date, datetime, timedelta
@@ -23,7 +26,17 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # Only send the cookie over HTTPS when deployed (set SMARTFIND_HTTPS=1 there).
 app.config["SESSION_COOKIE_SECURE"] = os.environ.get("SMARTFIND_HTTPS") == "1"
 
-UPLOAD_FOLDER = os.path.join(app.root_path, "static", "uploads")
+# --- Vercel (serverless) support ---------------------------------------------
+# Vercel's disk is read-only except /tmp, so the demo database and uploads live there.
+ON_VERCEL = bool(os.environ.get("VERCEL"))
+if ON_VERCEL:
+    DATA_ROOT = "/tmp/smartfind"
+    os.makedirs(DATA_ROOT, exist_ok=True)
+    os.chdir(DATA_ROOT)   # "smartfind.db" and the setup scripts use the current folder
+else:
+    DATA_ROOT = app.root_path
+
+UPLOAD_FOLDER = os.path.join(DATA_ROOT, "static", "uploads")
 ALLOWED_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
@@ -41,7 +54,7 @@ def save_image(file):
     return filename
 
 
-CHAT_UPLOAD_FOLDER = os.path.join(app.root_path, "chat_uploads")   # private, not in /static
+CHAT_UPLOAD_FOLDER = os.path.join(DATA_ROOT, "chat_uploads")   # private, not in /static
 CHAT_IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "webp"}   # shown inside the chat
 # Any file type may be shared EXCEPT programs and scripts, which could carry malware.
 CHAT_BLOCKED_EXTENSIONS = {
@@ -70,10 +83,61 @@ def save_chat_file(file):
     return stored, None
 
 
+if ON_VERCEL:
+    @app.route("/static/uploads/<path:filename>")
+    def uploaded_photo(filename):
+        return send_from_directory(UPLOAD_FOLDER, filename)
+
+
 @app.errorhandler(413)
 def too_large(error):
     flash("That file is too large.")
     return redirect(request.referrer or url_for("report"))
+
+
+DATABASE_SETUP_SCRIPTS = [
+    "init_db.py",
+    "add_users.py",
+    "migrate_places.py",
+    "add_image_column.py",
+    "add_claims.py",
+    "add_must_change.py",
+    "add_notifications.py",
+    "add_match_alerts.py",
+    "add_messages.py",
+    "add_phone_calls.py",
+    "add_item_details.py",
+    "add_post_reports.py",
+    "add_ai_usage.py",
+]
+
+
+def ensure_database():
+    """Initialize a fresh downloaded copy without touching an existing database."""
+    conn = sqlite3.connect("smartfind.db")
+    try:
+        has_items = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'items'"
+        ).fetchone()
+    finally:
+        conn.close()
+    if has_items:
+        return False
+
+    for filename in DATABASE_SETUP_SCRIPTS:
+        try:
+            runpy.run_path(os.path.join(app.root_path, filename), run_name="__main__")
+        except SystemExit:
+            pass
+        except Exception as error:
+            raise RuntimeError(f"Database setup failed in {filename}: {error}")
+    return True
+
+
+ensure_database()
+if ON_VERCEL:
+    import demo_data
+    demo_data.seed_if_empty()
 
 
 def get_db():
@@ -940,7 +1004,10 @@ def my_posts():
 
 
 def load_admin_email():
-    """Read the admin email from admin.txt (kept out of Git). No file = no admin."""
+    """Admin email: SMARTFIND_ADMIN_EMAIL if set (hosting), else admin.txt (kept out of Git)."""
+    env_email = os.environ.get("SMARTFIND_ADMIN_EMAIL", "").strip().lower()
+    if env_email:
+        return env_email
     try:
         with open(os.path.join(app.root_path, "admin.txt")) as f:
             return f.read().strip().lower()

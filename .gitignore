@@ -25,3 +25,6 @@ chat_uploads/
 _old/
 *.bak
 debug_test*.py
+
+.figma/
+.tmp/

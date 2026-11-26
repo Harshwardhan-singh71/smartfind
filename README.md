@@ -38,7 +38,8 @@ Nobody waits for AI. Every AI feature shows an instant local result first (a bui
 
 ## How to Run
 1. Install dependencies: `pip install -r requirements.txt`
-2. Create the database and tables by running these scripts **in this order**:
+2. On a fresh download, starting `app.py` now creates the database and tables
+   automatically. To set them up manually instead, run these scripts **in this order**:
    ```
    python init_db.py
    python add_users.py

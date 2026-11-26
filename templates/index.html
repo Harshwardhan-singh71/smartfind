@@ -1,104 +1,149 @@
 {% extends "base.html" %}
 
 {% block title %}SmartFind: Campus Lost &amp; Found{% endblock %}
+{% block body_class %}home-page{% endblock %}
+
+{% block hero %}
+    <section class="hero">
+        <div class="hero-atmosphere" aria-hidden="true">
+            <span class="atmosphere-orb orb-one"></span>
+            <span class="atmosphere-orb orb-two"></span>
+            <span class="atmosphere-grid"></span>
+        </div>
+        <div class="hero-grid">
+            <div class="hero-copy">
+                <p class="hero-badge">
+                    <img class="badge-logo" src="{{ url_for('static', filename='images/dsu_logo.png') }}" alt="" width="22" height="22">
+                    Dayananda Sagar University
+                </p>
+                <h1 class="hero-title">
+                    <span class="hl hl1">Lost on campus.</span>
+                    <span class="hl hl2">Found by community.</span>
+                </h1>
+                <p class="hero-lead">A private campus board that connects lost, found and seen items with the people looking for them.</p>
+
+                <form method="GET" class="hero-search">
+                    <input type="text" name="q" value="{{ q }}" placeholder="Search bottle, wallet, keys..." aria-label="Search items">
+                    <input type="hidden" name="status" value="{{ status }}">
+                    <button type="submit">Search board</button>
+                </form>
+
+                <div class="hero-actions">
+                    <a class="pill pill-cream" href="/report?type=lost"><span class="dot lost"></span>Report a lost item</a>
+                    <a class="pill pill-line" href="/report?type=found"><span class="dot found"></span>Report a found item</a>
+                </div>
+            </div>
+
+            <aside class="hero-board" aria-label="SmartFind campus board summary">
+                <div class="board-status"><span class="live-dot"></span>Campus board is active</div>
+                <p class="board-label">SMARTFIND / DSU</p>
+                <h2>One report reaches the whole campus.</h2>
+                <p class="board-copy">Post the details once. SmartFind compares reports, protects private information and helps the right people connect.</p>
+                <div class="stats">
+                    <div class="stat"><span class="stat-number">{{ stats.total }}</span><span class="stat-label">reports</span></div>
+                    <div class="stat"><span class="stat-number">{{ stats.open }}</span><span class="stat-label">open</span></div>
+                    <div class="stat"><span class="stat-number">{{ stats.returned }}</span><span class="stat-label">returned</span></div>
+                </div>
+                <div class="board-foot"><span>Campus-only access</span><span>Private claims</span></div>
+            </aside>
+        </div>
+    </section>
+{% endblock %}
 
 {% block content %}
-    <section class="hero">
-        <div class="hero-card">
-            <h1>Lost your <span class="rotator" id="rotator">bottle</span> on campus?</h1>
-            <p>One place for everything lost, found or seen at Dayananda Sagar University.</p>
-
-            <form method="GET" class="hero-search">
-                <input type="text" name="q" value="{{ q }}" placeholder="Search for a bottle, wallet, ID card, keys...">
-                <input type="hidden" name="status" value="{{ status }}">
-                <button type="submit">Search</button>
-            </form>
-        </div>
-
-        <div class="action-row">
-            <a class="action-card lost" href="/report?type=lost">
-                <span class="action-emoji">😟</span>
-                <span class="action-title">I lost something</span>
-                <span class="action-sub">Post it and let AI find matches</span>
-            </a>
-            <a class="action-card found" href="/report?type=found">
-                <span class="action-emoji">🙌</span>
-                <span class="action-title">I found something</span>
-                <span class="action-sub">Help it reach its owner</span>
-            </a>
-        </div>
+    <section class="trust-rail" aria-label="SmartFind service principles">
+        <div class="trust-item"><span>01</span><strong>Campus only</strong><small>Private student access</small></div>
+        <div class="trust-item"><span>02</span><strong>Instant matching</strong><small>Local results come first</small></div>
+        <div class="trust-item"><span>03</span><strong>Private claims</strong><small>Identity stays protected</small></div>
+        <div class="trust-item"><span>04</span><strong>Safer handovers</strong><small>Built around campus return</small></div>
     </section>
 
-    <section class="how">
-        <div class="how-step">
-            <span class="how-num">1</span>
-            <h4>Report</h4>
-            <p>Add a photo, the place and the time</p>
-        </div>
-        <span class="how-arrow">➜</span>
-        <div class="how-step">
-            <span class="how-num">2</span>
-            <h4>AI matches</h4>
-            <p>Lost, found and seen posts are scored by similarity</p>
-        </div>
-        <span class="how-arrow">➜</span>
-        <div class="how-step">
-            <span class="how-num">3</span>
-            <h4>Get it back</h4>
-            <p>Claim it, prove it's yours, and collect it</p>
-        </div>
-    </section>
-
-    <section class="stats">
-        <div class="stat"><span class="stat-number">{{ stats.total }}</span><span class="stat-label">Items reported</span></div>
-        <div class="stat"><span class="stat-number">{{ stats.open }}</span><span class="stat-label">Still open</span></div>
-        <div class="stat"><span class="stat-number">{{ stats.returned }}</span><span class="stat-label">Returned to owners</span></div>
-    </section>
-
-    <div class="tabs">
-        <a class="tab {% if not status %}active{% endif %}" href="/?q={{ q }}">All</a>
-        <a class="tab {% if status == 'lost' %}active{% endif %}" href="/?status=lost&q={{ q }}">Lost</a>
-        <a class="tab {% if status == 'found' %}active{% endif %}" href="/?status=found&q={{ q }}">Found</a>
-        <a class="tab {% if status == 'seen' %}active{% endif %}" href="/?status=seen&q={{ q }}">Seen</a>
-        <a class="tab {% if status == 'resolved' %}active{% endif %}" href="/?status=resolved&q={{ q }}">Resolved</a>
-        <a class="tab {% if status == 'old' %}active{% endif %}" href="/?status=old&q={{ q }}">Old</a>
-    </div>
-
-    {% for item in items %}
-    
-    <a class="card-link" href="/item/{{ item.id }}">
-        <div class="card {% if item.resolved %}resolved{% endif %}">
-            <div class="card-top">
-                <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
-                <span class="meta">{{ item.date_reported }}</span>
+    <section class="process-section">
+        <div class="section-heading">
+            <div>
+                <p class="eyebrow">A clearer way to recover belongings</p>
+                <h2 class="section-title">From missing to matched.</h2>
             </div>
-            <h3>{{ item.title }}</h3>
-            {% if item.image %}
-                <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
-            {% endif %}
-            <p>{{ (item.description or '')|truncate(100) }}</p>
-            <p class="meta">📍 {{ item.location }}{% if item.event_date %} &nbsp;·&nbsp; 🕒 {{ item.event_date }}{% endif %}</p>
-            <span class="view-more">View details →</span>
+            <p>Designed around how items actually move across a busy university campus.</p>
         </div>
-    </a>
-    {% else %}
-        {% if status == 'resolved' %}
-            <p class="empty">No resolved items yet.</p>
-        {% else %}
-            <p class="empty">No items found. Try a different search, or <a href="/report">report an item</a>.</p>
-        {% endif %}
-    {% endfor %}
 
-    <script>
-        var words = ["bottle", "wallet", "ID card", "keys", "charger", "notebook", "umbrella"];
-        var i = 0;
-        var el = document.getElementById("rotator");
-        setInterval(function () {
-            i = (i + 1) % words.length;
-            el.textContent = words[i];
-            el.style.animation = "none";
-            void el.offsetWidth;
-            el.style.animation = "";
-        }, 1800);
-    </script>
+        <div class="how">
+            <article class="how-step reveal">
+                <span class="how-num">01</span>
+                <div>
+                    <p class="step-label">REPORT</p>
+                    <h3>Tell the campus</h3>
+                    <p>Add the item, the last known place and a photo if you have one.</p>
+                </div>
+            </article>
+            <article class="how-step reveal">
+                <span class="how-num">02</span>
+                <div>
+                    <p class="step-label">MATCH</p>
+                    <h3>Compare the clues</h3>
+                    <p>SmartFind scores similar lost, found and seen reports instantly.</p>
+                </div>
+            </article>
+            <article class="how-step reveal">
+                <span class="how-num">03</span>
+                <div>
+                    <p class="step-label">RETURN</p>
+                    <h3>Confirm it safely</h3>
+                    <p>Use a private claim and campus handover to get it back safely.</p>
+                </div>
+            </article>
+        </div>
+    </section>
+
+    <section class="board-section">
+        <div class="feed-heading">
+            <div>
+                <p class="eyebrow">Live campus board</p>
+                <h2 class="section-title">Recent reports</h2>
+            </div>
+            <a class="text-link" href="/report">Post a new report <span aria-hidden="true">→</span></a>
+        </div>
+
+        <div class="tabs" aria-label="Filter campus reports">
+            <a class="tab {% if not status %}active{% endif %}" href="/?q={{ q }}">All</a>
+            <a class="tab {% if status == 'lost' %}active{% endif %}" href="/?status=lost&q={{ q }}">Lost</a>
+            <a class="tab {% if status == 'found' %}active{% endif %}" href="/?status=found&q={{ q }}">Found</a>
+            <a class="tab {% if status == 'seen' %}active{% endif %}" href="/?status=seen&q={{ q }}">Seen</a>
+            <a class="tab {% if status == 'resolved' %}active{% endif %}" href="/?status=resolved&q={{ q }}">Resolved</a>
+            <a class="tab {% if status == 'old' %}active{% endif %}" href="/?status=old&q={{ q }}">Old</a>
+        </div>
+
+        <div class="item-grid">
+            {% for item in items %}
+                <a class="card-link reveal" href="/item/{{ item.id }}">
+                    <article class="card{% if not item.image %} no-photo{% endif %}{% if item.resolved %} resolved{% endif %}">
+                        {% if item.image %}
+                            <img class="item-photo" src="{{ url_for('static', filename='uploads/' + item.image) }}" alt="{{ item.title }}">
+                        {% else %}
+                            <div class="item-placeholder" aria-hidden="true">
+                                <span>{{ (item.title or '?')[:1]|upper }}</span>
+                                <small>Text report</small>
+                            </div>
+                        {% endif %}
+                        <div class="card-content">
+                            <div class="card-top">
+                                <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
+                                <span class="meta">{{ (item.date_reported or '')[:10] }}</span>
+                            </div>
+                            <h3>{{ item.title }}</h3>
+                            <p>{{ (item.description or '')|truncate(100) }}</p>
+                            <p class="meta item-location">{{ item.location }}{% if item.event_date %} <span>·</span> {{ item.event_date }}{% endif %}</p>
+                            <span class="view-more">Open report <span aria-hidden="true">→</span></span>
+                        </div>
+                    </article>
+                </a>
+            {% else %}
+                {% if status == 'resolved' %}
+                    <p class="empty">No resolved items yet.</p>
+                {% else %}
+                    <p class="empty">No items found. Try a different search, or <a href="/report">report an item</a>.</p>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </section>
 {% endblock %}

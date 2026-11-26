@@ -2,6 +2,17 @@
 Last updated: 23 Nov 2026. Update this file at the end of every working session. (It replaces the old STATUS.md.)
 
 ## Done
+- First-run database setup: a downloaded copy now detects a missing `items` table and runs the existing schema scripts automatically before serving Flask; existing databases are left untouched.
+- Responsive hero atmosphere: moved the campus photo, glow and bottom fade from the fixed-width hero container to a full-viewport layer, removing the visible rectangular cutoff in both themes and allowing the effect to resize with the preview.
+- Hero action cleanup: removed the diagonal grid/colour block behind the report buttons, confined campus photography to the right side, and versioned the stylesheet URL so browsers load the correction instead of stale CSS.
+- Theme polish: fixed hero/menu clipping, removed competing reveal systems and hidden-content animation states, softened the light-mode section transition, and rebalanced display/body typography and spacing.
+- Persistent dark/light themes: navigation switch remembers the choice, updates the whole site, uses a smooth circular reveal when supported, respects reduced motion, and keeps the cinematic design in a lighter DSU-blue palette.
+- Full-site visual system: extended the cinematic dark/glass design from the homepage to report, item, activity, matches, chat, notifications, profile, login and admin screens, including forms, tables, alerts and mobile layouts.
+- Reference-led homepage refinement: combined AW Media-inspired cinematic depth, glass panels, ambient lighting, numbered storytelling and progressive scroll motion with Tasa-style clarity, contrast, reduced-motion support and direct campus-service language.
+- Recent reports: text-only posts use a compact identity strip instead of reserving a full photo area, and no-photo cards no longer stretch to match photo cards.
+- Homepage visual redesign: authentic DSU campus-service identity using the real campus photo, editorial hero, live board summary, clearer recovery process, responsive report grid, and restrained motion. Existing routes and behavior are unchanged.
+- Accessibility polish: mobile menu and notifications now report open/closed state, close with Escape and restore keyboard focus; the rotating home headline respects reduced-motion preferences.
+- Figma Make import bootstrap: `.figma/make/install` installs requirements and initializes a missing local database; `.figma/make/dev` serves Flask on the assigned preview port. `figma make verify-bootstrap` passes.
 - Phone menu: hamburger menu at max-width 700px, vertical list, 44px links, bell dropdown constrained to `calc(100vw - 24px)`.
 - Safety net: `html, body { max-width: 100%; overflow-x: hidden; }`, `overflow-wrap: anywhere` on nav links.
 - Footer fix: `body` column flex with `min-height: 100vh` and `main` flex: 1.
@@ -26,6 +37,7 @@ AI step D: safety limits for ~100 users on free Gemini tier.
 - test_smoke.py: verify all checks pass with new logic (requires scikit-learn)
 
 ## Known issues
+- Figma deploy and deploy-preview do not support this stateful Flask + SQLite app as a static site. Deploy-preview is explicitly skipped; production remains planned for a Python host such as PythonAnywhere.
 - Circuit breaker logic in ask_text/_call_gemini_image not yet fully implemented due to editor tooling issues
 - scikit-learn needed for test_smoke.py; install with: python -m pip install scikit-learn
 

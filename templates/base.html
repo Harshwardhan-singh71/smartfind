@@ -5,62 +5,88 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}SmartFind{% endblock %}</title>
     <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
-    <meta name="theme-color" content="#14213d">
+    <meta name="theme-color" content="#080b12">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/icon-192.png') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="preload" href="{{ url_for('static', filename='fonts/outfit-latin-wght-normal.woff2') }}" as="font" type="font/woff2" crossorigin>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css', v='10') }}">
+    <script>
+        document.documentElement.className += " js";
+        try {
+            document.documentElement.dataset.theme = localStorage.getItem("smartfind-theme") || "dark";
+        } catch (error) {
+            document.documentElement.dataset.theme = "dark";
+        }
+    </script>
 </head>
-<body>
-    <nav class="navbar">
-        <a class="brand" href="/">
-            <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true">
-                <defs>
-                    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
-                        <stop offset="0" stop-color="#ffa062"/>
-                        <stop offset="1" stop-color="#ff5e2b"/>
-                    </linearGradient>
-                </defs>
-                <rect width="48" height="48" rx="13" fill="url(#lg)"/>
-                <circle cx="21" cy="21" r="10" fill="none" stroke="white" stroke-width="4"/>
-                <path d="M29 29l10 10" stroke="white" stroke-width="5" stroke-linecap="round"/>
-                <path d="M17 21.5l3 3 6-7" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-            <span>Smart<span class="brand-find">Find</span></span>
-        </a>
-        <button type="button" class="menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="nav-links">☰ Menu{% if session.user_id and unread_count %}<span class="badge">{{ unread_count }}</span>{% endif %}</button>
-        <div class="nav-links" id="nav-links">
-            <a href="/">Home</a>
-            <a href="/report">Report item</a>
-            {% if session.user_id %}
-                <a href="/activity">My activity</a>
-                <div class="bell-wrap">
-                    <button type="button" class="bell" id="bell-btn" aria-label="Notifications">🔔<span class="bell-label">Notifications</span>{% if unread_count %}<span class="badge">{{ unread_count }}</span>{% endif %}</button>
-                    <div class="bell-menu" id="bell-menu">
-                        <div class="bell-head">
-                            <b>Notifications</b>
-                            <form method="POST" action="/notifications/read-all">
-                                <button type="submit" class="bell-link">Mark all as read</button>
-                            </form>
+<body class="{% block body_class %}app-page{% endblock %}">
+    {% set p = request.path %}
+    <header class="top-panel">
+        <nav class="navbar{% if is_admin %} has-admin{% endif %}" id="navbar">
+            <a class="brand" href="/">
+                <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true">
+                    <defs>
+                        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+                            <stop offset="0" stop-color="#ffa062"/>
+                            <stop offset="1" stop-color="#ff5e2b"/>
+                        </linearGradient>
+                    </defs>
+                    <rect width="48" height="48" rx="13" fill="url(#lg)"/>
+                    <circle cx="21" cy="21" r="10" fill="none" stroke="white" stroke-width="4"/>
+                    <path d="M29 29l10 10" stroke="white" stroke-width="5" stroke-linecap="round"/>
+                    <path d="M17 21.5l3 3 6-7" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span>Smart<span class="brand-find">Find</span></span>
+            </a>
+            <button type="button" class="menu-toggle" id="menu-toggle" aria-expanded="false" aria-controls="nav-links">☰ Menu{% if session.user_id and unread_count %}<span class="badge">{{ unread_count }}</span>{% endif %}</button>
+            <div class="nav-links" id="nav-links">
+                <button type="button" class="theme-toggle" id="theme-toggle" aria-label="Switch to light theme" aria-pressed="false" title="Change colour theme">
+                    <span class="theme-toggle-label">Theme</span>
+                    <span class="theme-toggle-track" aria-hidden="true">
+                        <span class="theme-toggle-thumb"></span>
+                        <svg class="theme-icon theme-icon-moon" viewBox="0 0 24 24">
+                            <path d="M20 15.2A8.5 8.5 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"></path>
+                        </svg>
+                        <svg class="theme-icon theme-icon-sun" viewBox="0 0 24 24">
+                            <circle cx="12" cy="12" r="3.5"></circle>
+                            <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path>
+                        </svg>
+                    </span>
+                </button>
+                <a href="/" class="{% if p == '/' %}current{% endif %}">Home</a>
+                <a href="/report" class="{% if p.startswith('/report') %}current{% endif %}">Report item</a>
+                {% if session.user_id %}
+                    <a href="/activity" class="{% if p.startswith('/activity') or p.startswith('/my-posts') %}current{% endif %}">My activity</a>
+                    <div class="bell-wrap">
+                        <button type="button" class="bell" id="bell-btn" aria-label="Notifications" aria-expanded="false" aria-controls="bell-menu">🔔<span class="bell-label">Notifications</span>{% if unread_count %}<span class="badge">{{ unread_count }}</span>{% endif %}</button>
+                        <div class="bell-menu" id="bell-menu">
+                            <div class="bell-head">
+                                <b>Notifications</b>
+                                <form method="POST" action="/notifications/read-all">
+                                    <button type="submit" class="bell-link">Mark all as read</button>
+                                </form>
+                            </div>
+                            {% for n in recent_notifications %}
+                                <a class="bell-item {% if not n.is_read %}unread{% endif %}" href="/notifications/{{ n.id }}/go">
+                                    {{ n.message }}
+                                    <span class="meta">{{ n.created_at }}</span>
+                                </a>
+                            {% else %}
+                                <p class="bell-empty">No notifications yet.</p>
+                            {% endfor %}
+                            <a class="bell-foot" href="/notifications">See all notifications →</a>
                         </div>
-                        {% for n in recent_notifications %}
-                            <a class="bell-item {% if not n.is_read %}unread{% endif %}" href="/notifications/{{ n.id }}/go">
-                                {{ n.message }}
-                                <span class="meta">{{ n.created_at }}</span>
-                            </a>
-                        {% else %}
-                            <p class="bell-empty">No notifications yet.</p>
-                        {% endfor %}
-                        <a class="bell-foot" href="/notifications">See all notifications →</a>
                     </div>
-                </div>
-                {% if is_admin %}<a href="/admin/users">Manage users</a><a href="/admin/activity">Activity log</a><a href="/admin/reports">Reports{% if open_reports %} ({{ open_reports }}){% endif %}</a><span class="admin-pill">ADMIN</span>{% endif %}
-                <a class="nav-user" href="/profile" title="My profile">Hi, {{ session.user_name }}</a>
-                <a href="/logout">Logout</a>
-            {% else %}
-                <a class="btn-small" href="/login">Login</a>
-            {% endif %}
-        </div>
-    </nav>
+                    {% if is_admin %}<a href="/admin/users" class="{% if p.startswith('/admin/users') %}current{% endif %}">Users</a><a href="/admin/activity" class="{% if p.startswith('/admin/activity') %}current{% endif %}">Activity log</a><a href="/admin/reports" class="{% if p.startswith('/admin/reports') %}current{% endif %}">Reports{% if open_reports %} ({{ open_reports }}){% endif %}</a><span class="admin-pill">Admin</span>{% endif %}
+                    <a class="nav-user" href="/profile" title="My profile: {{ session.user_name }}"><span class="avatar" aria-hidden="true">{{ (session.user_name or '?')[:1]|upper }}</span><span class="nav-user-name">{{ session.user_name }}</span></a>
+                    <a href="/logout" class="nav-logout">Logout</a>
+                {% else %}
+                    <a class="btn-small" href="/login">Login</a>
+                {% endif %}
+            </div>
+        </nav>
+        {% block hero %}{% endblock %}
+    </header>
 
     <main class="container">
         {% with messages = get_flashed_messages() %}
@@ -71,19 +97,58 @@
         {% block content %}{% endblock %}
     </main>
 
-    <footer>
-        <p style="margin: 0 0 6px;">🛡️ SmartFind is free and never asks for money. Meet in a public place on campus. Never share OTPs or passwords.</p>
-        SmartFind · Dayananda Sagar University
+    <footer class="site-footer">
+        <div class="footer-inner">
+            <p class="footer-safe">🛡️ SmartFind is free and never asks for money. Meet in a public place on campus. Never share OTPs or passwords.</p>
+            <img class="footer-logo" src="{{ url_for('static', filename='images/dsu_logo.png') }}" alt="Dayananda Sagar University" width="46" height="46">
+            <p class="footer-credit">SmartFind · Dayananda Sagar University</p>
+        </div>
     </footer>
 
     <script>
         (function () {
+            var button = document.getElementById("theme-toggle");
+            var themeMeta = document.querySelector('meta[name="theme-color"]');
+            if (!button) return;
+
+            function applyTheme(theme) {
+                var light = theme === "light";
+                document.documentElement.dataset.theme = theme;
+                button.setAttribute("aria-pressed", light ? "true" : "false");
+                button.setAttribute("aria-label", light ? "Switch to dark theme" : "Switch to light theme");
+                if (themeMeta) themeMeta.setAttribute("content", light ? "#eaf3ff" : "#080b12");
+                try { localStorage.setItem("smartfind-theme", theme); } catch (error) {}
+            }
+
+            applyTheme(document.documentElement.dataset.theme === "light" ? "light" : "dark");
+            button.addEventListener("click", function () {
+                var next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+                var calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+                if (!calm && document.startViewTransition) {
+                    document.startViewTransition(function () { applyTheme(next); });
+                } else {
+                    document.documentElement.classList.add("theme-changing");
+                    applyTheme(next);
+                    window.setTimeout(function () {
+                        document.documentElement.classList.remove("theme-changing");
+                    }, calm ? 0 : 550);
+                }
+            });
+        })();
+        (function () {
             var toggle = document.getElementById("menu-toggle");
-            var nav = document.querySelector(".navbar");
+            var nav = document.getElementById("navbar");
             if (toggle && nav) {
                 toggle.addEventListener("click", function () {
                     var open = nav.classList.toggle("open");
                     toggle.setAttribute("aria-expanded", open ? "true" : "false");
+                });
+                document.addEventListener("keydown", function (e) {
+                    if (e.key === "Escape" && nav.classList.contains("open")) {
+                        nav.classList.remove("open");
+                        toggle.setAttribute("aria-expanded", "false");
+                        toggle.focus();
+                    }
                 });
             }
         })();
@@ -91,15 +156,40 @@
             var btn = document.getElementById("bell-btn");
             var menu = document.getElementById("bell-menu");
             if (!btn || !menu) return;
+            function closeMenu(returnFocus) {
+                menu.classList.remove("open");
+                btn.setAttribute("aria-expanded", "false");
+                if (returnFocus) btn.focus();
+            }
             btn.addEventListener("click", function (e) {
                 e.stopPropagation();
-                menu.classList.toggle("open");
+                var open = menu.classList.toggle("open");
+                btn.setAttribute("aria-expanded", open ? "true" : "false");
             });
             document.addEventListener("click", function (e) {
-                if (!menu.contains(e.target)) menu.classList.remove("open");
+                if (!menu.contains(e.target)) closeMenu(false);
             });
             document.addEventListener("keydown", function (e) {
-                if (e.key === "Escape") menu.classList.remove("open");
+                if (e.key === "Escape" && menu.classList.contains("open")) closeMenu(true);
+            });
+        })();
+        // Cards and steps rise into view once as you scroll (skipped for reduced motion)
+        (function () {
+            var els = document.querySelectorAll(".reveal");
+            if (!els.length) return;
+            var calm = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+            if (calm || !("IntersectionObserver" in window)) {
+                els.forEach(function (el) { el.classList.add("in"); });
+                return;
+            }
+            var io = new IntersectionObserver(function (entries) {
+                entries.forEach(function (en) {
+                    if (en.isIntersecting) { en.target.classList.add("in"); io.unobserve(en.target); }
+                });
+            }, { rootMargin: "0px 0px -8% 0px" });
+            els.forEach(function (el, i) {
+                el.style.setProperty("--d", ((i % 4) * 70) + "ms");
+                io.observe(el);
             });
         })();
     </script>

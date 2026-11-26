@@ -91,6 +91,29 @@ check("correct login redirects", r.status_code == 302)
 # 3. Main pages open
 for path in ["/", "/report", "/my-posts", "/activity", "/notifications", "/profile"]:
     check(f"GET {path} = 200", alice.get(path).status_code == 200)
+home = alice.get("/")
+check(
+    "theme switch is available",
+    b'id="theme-toggle"' in home.data and b"smartfind-theme" in home.data,
+)
+
+# A downloaded copy with an empty database initializes itself on first launch.
+fresh = tempfile.mkdtemp(prefix="smartfind_first_run_", dir=tmp)
+os.chdir(fresh)
+created = appmod.ensure_database()
+fresh_conn = sqlite3.connect("smartfind.db")
+fresh_tables = {
+    row[0] for row in fresh_conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    )
+}
+fresh_conn.close()
+os.chdir(tmp)
+shutil.rmtree(fresh, ignore_errors=True)
+check(
+    "fresh download initializes its database",
+    created and {"items", "users", "claims", "notifications"}.issubset(fresh_tables),
+)
 
 # 4. Post an item with an extra detail row
 r = alice.post("/report", data={

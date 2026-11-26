@@ -13,7 +13,7 @@
     <div class="card detail-card {% if item.resolved %}resolved{% endif %}">
         <div class="card-top">
             <span class="tag {{ item.status }}">{{ item.status|upper }}</span>
-            <span class="meta">Posted {{ item.date_reported }}</span>
+            <span class="meta">Posted {{ (item.date_reported or '')[:10] }}</span>
         </div>
         <h1 class="page-title">{{ item.title }}</h1>
         {% if item.image %}
