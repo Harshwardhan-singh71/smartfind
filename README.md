@@ -93,3 +93,4 @@ python test_photo_bot.py
 ## Authors
 Harshwardhan Singh, 2nd year CSE, Dayananda Sagar University
 Kartik Kamakhya, 2nd year CSE, Dayananda Sagar University
+Kaushal Patil, 2nd year CSE, Dayananda Sagar University
